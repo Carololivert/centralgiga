@@ -1,0 +1,101 @@
+# Deploy — Central de Automações Giganet
+
+Três peças:
+
+| Peça | Onde | Por quê |
+|---|---|---|
+| **web** (Nuxt 4) | **Vercel** | front + API routes (avaliações). Serverless. |
+| **worker** (Python + Playwright) | **easypanel** (Docker) ou **VPS** | precisa de Chromium → não roda em serverless. |
+| **banco** (Supabase) | já configurado | nada a fazer (migrations 0001–0006 aplicadas). |
+
+> Os valores das variáveis estão nos seus arquivos locais `web/.env` e `worker/.env`.
+> **Nunca** comite `.env` (já está no `.gitignore`).
+
+---
+
+## 1. Web na Vercel
+
+A central web está na subpasta **`web/`**.
+
+### Variáveis de ambiente (Vercel → Project → Settings → Environment Variables)
+```
+SUPABASE_URL            = https://SEU-PROJETO.supabase.co
+SUPABASE_KEY            = (anon key — web/.env)
+SUPABASE_SERVICE_KEY    = (service_role — web/.env)   ← só no servidor, nunca exposta
+GIGANET_WEBHOOK_SECRET  = (web/.env)
+N8N_PUBLICAR_URL        = https://SEU-N8N.exemplo.com/webhook/giganet-publicar
+N8N_REGERAR_URL         = https://SEU-N8N.exemplo.com/webhook/giganet-regerar
+ANTHROPIC_API_KEY       = (opcional — botão "regerar" usa o n8n, não precisa)
+ANTHROPIC_MODEL         = claude-sonnet-4-6
+NUXT_PUBLIC_SGP_URL     = https://SEU-AUT-SGP.exemplo.com
+```
+
+### Passo a passo
+1. Suba o repositório no GitHub (veja "Git" abaixo) e em **vercel.com → Add New Project → Import** o repo.
+2. **Root Directory: `web`** (importante — o app não está na raiz). O Nuxt é detectado sozinho (build `nuxt build`, sem config extra).
+3. Cole as variáveis acima (Production).
+4. **Deploy.** Anote a URL (ex.: `https://central-giganet.vercel.app`).
+
+> Alternativa por CLI: `npm i -g vercel`, depois dentro de `web/`: `vercel` (link) e `vercel --prod`.
+
+---
+
+## 2. Worker no easypanel (Docker)
+
+O worker tem um **`Dockerfile`** pronto (Python + Chromium do Playwright).
+
+1. easypanel → **Create → App → Source: o repositório**, **Build: Dockerfile**, **Build context / path: `worker`**.
+2. Variáveis de ambiente do serviço:
+   ```
+   SUPABASE_URL               = https://SEU-PROJETO.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY  = (worker/.env)
+   RESULT_BUCKET              = resultados
+   SGP_USER                   = (worker/.env)
+   SGP_PASS                   = (worker/.env)
+   SGP_VERIFY_SSL             = false
+   FOCUS_USER                 = (worker/.env)
+   FOCUS_PASS                 = (worker/.env)
+   OPENROUTER_API_KEY         = (worker/.env)   # ou ANTHROPIC_API_KEY p/ a IA do checklist
+   OPENROUTER_MODEL           = meta-llama/llama-3-70b-instruct
+   WORKER_POLL_SECONDS        = 5
+   ```
+3. Sem porta exposta (o worker só faz chamadas de saída). Deixe **restart: always**.
+4. Deploy. Nos logs deve aparecer `[worker] iniciado · automações: relatorio-os, termos-agendados, ...`.
+
+### Alternativa: VPS com systemd
+Use `worker/deploy/worker.service` (instruções no `worker/README.md`): `python -m venv`, `pip install -r requirements.txt`, `playwright install chromium`, preencher `.env`, `systemctl enable --now giganet-worker`.
+
+---
+
+## 3. Pós-deploy
+
+1. **Reapontar o n8n** (fecha o "gap" das avaliações): no fluxo que envia as avaliações novas, troque a URL para a da Vercel:
+   - `POST https://SEU-DOMINIO.vercel.app/api/avaliacoes/webhook`
+   - header `x-webhook-secret: <GIGANET_WEBHOOK_SECRET>`
+2. **Teste o login** na URL da Vercel (admin `rafael@gmail.com`). Crie usuários em **Usuários**.
+3. **Teste um job** (Relatório de OS → Executar) — confirma que o worker no easypanel está pegando a fila.
+4. **Avaliações** — as 51 existentes aparecem; novas passam a chegar pelo n8n reapontado.
+
+---
+
+## Git (para o deploy via GitHub)
+
+A pasta `Centralgiga` ainda não é um repositório. Para subir:
+```bash
+cd Centralgiga
+git init
+git add .
+git commit -m "Central Giganet — web + worker + supabase"
+git branch -M main
+git remote add origin https://github.com/SEU-USUARIO/centralgiga.git
+git push -u origin main
+```
+O `.gitignore` já protege os `.env`, `node_modules`, `venv`, `.nuxt`, etc.
+
+---
+
+## Segurança (resumo)
+- `service_role` só no **worker** e nas **server routes** do web (nunca no navegador).
+- Bucket `resultados` privado (download por signed URL).
+- `.env` nunca vai pro git.
+- Avaliações: tabela com RLS; webhook protegido por `x-webhook-secret` + RPC com segredo.

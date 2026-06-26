@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+deploy/
+debug_checklist_resultado.json
+*.csv
+*.xlsx
+vendas_do_dia.csv
+relatorio_final.csv
+numeros_removidos.csv

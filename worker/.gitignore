@@ -1,0 +1,10 @@
+.env
+venv/
+__pycache__/
+*.pyc
+debug_checklist_resultado.json
+# saídas/debug gerados pelos scripts (nunca versionar — podem ter dados de cliente)
+*.png
+*.csv
+*.xlsx
+debug_*.png

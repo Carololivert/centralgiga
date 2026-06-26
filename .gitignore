@@ -1,0 +1,27 @@
+# ── segredos ──
+**/.env
+**/.env.local
+!**/.env.example
+
+# ── web (Nuxt) ──
+web/node_modules
+web/.nuxt
+web/.output
+web/.data
+web/dist
+
+# ── worker (Python) ──
+worker/venv
+**/__pycache__
+*.pyc
+worker/debug_checklist_resultado.json
+worker/*.csv
+worker/*.xlsx
+
+# ── pastas de "drop" dos scripts atualizados (a fonte vai p/ worker/scripts_originais) ──
+Aut-SGP-main*/
+*.zip
+
+# ── diversos ──
+.DS_Store
+*.log

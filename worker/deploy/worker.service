@@ -1,0 +1,17 @@
+[Unit]
+Description=Central Giganet - Worker de automacoes
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=giganet
+WorkingDirectory=/opt/giganet-central/worker
+EnvironmentFile=/opt/giganet-central/worker/.env
+ExecStart=/opt/giganet-central/worker/venv/bin/python worker.py
+Restart=always
+RestartSec=5
+# log vai pro journald: journalctl -u giganet-worker -f
+
+[Install]
+WantedBy=multi-user.target

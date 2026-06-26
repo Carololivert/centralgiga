@@ -1,0 +1,26 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+@theme static {
+  --font-sans: 'Public Sans', sans-serif;
+
+  /* Dourado/amarelo Giganet — sobrescreve o "amber" (cor base do primary).
+     Usamos um nome que o Nuxt UI já conhece (amber), senão ele cai no verde. */
+  --color-amber-50: #fffaeb;
+  --color-amber-100: #fdedc8;
+  --color-amber-200: #fbd98c;
+  --color-amber-300: #f8c350;
+  --color-amber-400: #f5ad24;
+  --color-amber-500: #ef9d0b;
+  --color-amber-600: #d4920a;
+  --color-amber-700: #a4610b;
+  --color-amber-800: #854c10;
+  --color-amber-900: #6f3f11;
+  --color-amber-950: #401f05;
+}
+
+/* O primary é amarelo (cor clara): em fills sólidos o texto/ícone branco
+   fica ilegível. Forçamos texto escuro onde houver bg sólido amarelo. */
+.bg-primary.text-inverted {
+  color: #0f172a;
+}
