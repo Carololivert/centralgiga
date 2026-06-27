@@ -7,6 +7,7 @@ const route = useRoute()
 const client = useSupabaseClient()
 const user = useSupabaseUser()
 const toast = useToast()
+const { isAdmin } = usePerfil()
 
 const slug = computed(() => String(route.params.slug))
 const ehChecklist = computed(() => slug.value === 'conferencia-checklist')
@@ -15,11 +16,7 @@ const ehDestrutivo = computed(() => slug.value === 'remover-linhas')
 const { data: sistema } = await useAsyncData(
   () => `system-${slug.value}`,
   async () => {
-    const { data } = await client
-      .from('systems')
-      .select('*')
-      .eq('slug', slug.value)
-      .maybeSingle()
+    const { data } = await client.from('systems').select('*').eq('slug', slug.value).maybeSingle()
     return data as Sistema | null
   },
 )
@@ -33,18 +30,13 @@ const iconePorSlug: Record<string, string> = {
   'remover-linhas': 'i-lucide-trash-2',
 }
 
-// ── parâmetros (param_schema) ──────────────────────────────────
+// ── parâmetros ─────────────────────────────────────────────────
 const campos = computed(() =>
-  Object.entries(sistema.value?.param_schema ?? {}).map(([key, def]) => ({
-    key,
-    ...(def as any),
-  })),
+  Object.entries(sistema.value?.param_schema ?? {}).map(([key, def]) => ({ key, ...(def as any) })),
 )
 const paramsModel = reactive<Record<string, any>>({})
 watchEffect(() => {
-  for (const c of campos.value) {
-    if (!(c.key in paramsModel)) paramsModel[c.key] = c.default ?? ''
-  }
+  for (const c of campos.value) if (!(c.key in paramsModel)) paramsModel[c.key] = c.default ?? ''
 })
 
 // ── execução atual ─────────────────────────────────────────────
@@ -57,22 +49,19 @@ let canal: any = null
 const emAndamento = computed(
   () => jobAtual.value?.status === 'na_fila' || jobAtual.value?.status === 'executando',
 )
+const concluido = computed(() => jobAtual.value?.status === 'concluido')
 const logsTexto = computed(() => logs.value.map(l => l.line).join('\n'))
 
 const statusInfo: Record<string, { label: string, color: any, icon: string }> = {
   na_fila: { label: 'Na fila', color: 'neutral', icon: 'i-lucide-clock' },
-  executando: { label: 'Executando', color: 'info', icon: 'i-lucide-loader-circle' },
-  concluido: { label: 'Concluído', color: 'success', icon: 'i-lucide-check' },
-  erro: { label: 'Erro', color: 'error', icon: 'i-lucide-x' },
+  executando: { label: 'Processando', color: 'info', icon: 'i-lucide-loader-circle' },
+  concluido: { label: 'Concluído', color: 'success', icon: 'i-lucide-circle-check' },
+  erro: { label: 'Falhou', color: 'error', icon: 'i-lucide-circle-x' },
 }
 
 function parseDados(j: Job | null): any | null {
   if (!j || !ehChecklist.value || !j.result_preview) return null
-  try {
-    return JSON.parse(j.result_preview)
-  } catch {
-    return null
-  }
+  try { return JSON.parse(j.result_preview) } catch { return null }
 }
 const dadosAtual = computed(() => parseDados(jobAtual.value))
 
@@ -80,12 +69,8 @@ const dadosAtual = computed(() => parseDados(jobAtual.value))
 const { data: historico, refresh: refreshHistorico } = await useAsyncData(
   () => `jobs-${slug.value}`,
   async () => {
-    const { data } = await client
-      .from('jobs')
-      .select('*')
-      .eq('system_slug', slug.value)
-      .order('created_at', { ascending: false })
-      .limit(20)
+    const { data } = await client.from('jobs').select('*').eq('system_slug', slug.value)
+      .order('created_at', { ascending: false }).limit(20)
     return (data ?? []) as Job[]
   },
 )
@@ -95,21 +80,13 @@ function inscrever(jobId: string) {
   if (canal) client.removeChannel(canal)
   canal = client
     .channel(`job-${jobId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'jobs', filter: `id=eq.${jobId}` },
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter: `id=eq.${jobId}` },
       (payload: any) => {
         jobAtual.value = payload.new as Job
         if (['concluido', 'erro'].includes(payload.new.status)) refreshHistorico()
-      },
-    )
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'job_logs', filter: `job_id=eq.${jobId}` },
-      (payload: any) => {
-        logs.value.push(payload.new as JobLog)
-      },
-    )
+      })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'job_logs', filter: `job_id=eq.${jobId}` },
+      (payload: any) => { logs.value.push(payload.new as JobLog) })
     .subscribe()
 }
 
@@ -121,12 +98,8 @@ async function executar() {
       return
     }
   }
-
-  // confirmação extra para a remoção REAL (fora da simulação)
   if (ehDestrutivo.value && paramsModel.dry_run === false) {
-    if (!window.confirm('ATENÇÃO: isto vai REMOVER linhas no SGP DE VERDADE (não é simulação). Tem certeza?')) {
-      return
-    }
+    if (!window.confirm('ATENÇÃO: isto vai REMOVER linhas no SGP DE VERDADE (não é simulação). Tem certeza?')) return
   }
 
   enviando.value = true
@@ -134,24 +107,15 @@ async function executar() {
   jobAtual.value = null
   mostrarLogs.value = false
 
-  const { data, error } = await client
-    .from('jobs')
-    .insert({
-      system_slug: slug.value,
-      requested_by: user.value.id,
-      params: { ...paramsModel },
-      status: 'na_fila',
-    })
-    .select()
-    .single()
-
+  const { data, error } = await client.from('jobs')
+    .insert({ system_slug: slug.value, requested_by: user.value.id, params: { ...paramsModel }, status: 'na_fila' })
+    .select().single()
   enviando.value = false
 
   if (error) {
     toast.add({ title: 'Não foi possível executar', description: error.message, color: 'error' })
     return
   }
-
   jobAtual.value = data as Job
   inscrever((data as Job).id)
   refreshHistorico()
@@ -160,7 +124,7 @@ async function executar() {
 function copiar(texto: string | null | undefined) {
   if (!texto) return
   navigator.clipboard.writeText(texto)
-  toast.add({ title: 'Copiado para a área de transferência', color: 'success' })
+  toast.add({ title: 'Copiado!', color: 'success' })
 }
 
 async function baixar(path: string | null) {
@@ -177,18 +141,13 @@ function fmtData(iso: string) {
   return new Date(iso).toLocaleString('pt-BR')
 }
 
-onUnmounted(() => {
-  if (canal) client.removeChannel(canal)
-})
+onUnmounted(() => { if (canal) client.removeChannel(canal) })
 </script>
 
 <template>
   <UDashboardPanel id="sistema">
     <template #header>
-      <UDashboardNavbar
-        :title="sistema?.name || 'Sistema'"
-        :icon="iconePorSlug[slug] || 'i-lucide-cpu'"
-      >
+      <UDashboardNavbar :title="sistema?.name || 'Sistema'" :icon="iconePorSlug[slug] || 'i-lucide-cpu'">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
@@ -207,8 +166,8 @@ onUnmounted(() => {
               color="warning"
               variant="soft"
               icon="i-lucide-alert-triangle"
-              title="Ação destrutiva"
-              description="Por padrão roda em simulação (não remove). Desmarque 'Apenas simular' só quando tiver certeza — toda execução fica registrada na auditoria."
+              title="Ação que altera o SGP"
+              description="Por segurança vem marcado como simulação (não remove nada). Só desmarque 'Apenas simular' quando tiver certeza."
             />
 
             <div v-if="campos.length" class="grid gap-4 sm:grid-cols-2">
@@ -218,18 +177,13 @@ onUnmounted(() => {
                   <span class="text-sm">{{ c.label || c.key }}</span>
                 </div>
                 <UFormField v-else :label="c.label || c.key" :required="c.required">
-                  <USelect
-                    v-if="c.type === 'select'"
-                    v-model="paramsModel[c.key]"
-                    :items="c.options"
-                    class="w-full"
-                  />
+                  <USelect v-if="c.type === 'select'" v-model="paramsModel[c.key]" :items="c.options" class="w-full" />
                   <UInput v-else v-model="paramsModel[c.key]" class="w-full" />
                 </UFormField>
               </template>
             </div>
 
-            <div class="flex items-center gap-3">
+            <div>
               <UButton
                 icon="i-lucide-play"
                 size="lg"
@@ -238,25 +192,23 @@ onUnmounted(() => {
                 :disabled="emAndamento"
                 @click="executar"
               />
-              <UBadge
-                v-if="jobAtual"
-                :color="statusInfo[jobAtual.status].color"
-                variant="subtle"
-                :icon="statusInfo[jobAtual.status].icon"
-                :label="statusInfo[jobAtual.status].label"
-              />
             </div>
           </div>
         </UCard>
 
-        <!-- Resultado / execução -->
+        <!-- Resultado / execução (amigável) -->
         <UCard v-if="jobAtual" class="mb-6">
           <template #header>
             <div class="flex items-center justify-between gap-2">
-              <h3 class="font-semibold">
-                {{ jobAtual.status === 'concluido' ? 'Resultado' : 'Execução' }}
-              </h3>
-              <div v-if="jobAtual.status === 'concluido'" class="flex items-center gap-2">
+              <div class="flex items-center gap-2">
+                <UBadge
+                  :color="statusInfo[jobAtual.status].color"
+                  variant="subtle"
+                  :icon="statusInfo[jobAtual.status].icon"
+                  :label="statusInfo[jobAtual.status].label"
+                />
+              </div>
+              <div v-if="concluido" class="flex items-center gap-2">
                 <UButton
                   v-if="!ehChecklist"
                   icon="i-lucide-copy"
@@ -270,57 +222,53 @@ onUnmounted(() => {
                   size="sm"
                   color="neutral"
                   variant="ghost"
-                  :label="ehChecklist ? 'Baixar .json' : 'Baixar .txt'"
+                  :label="ehChecklist ? 'Baixar planilha' : 'Baixar'"
                   @click="baixar(jobAtual.result_path)"
                 />
               </div>
             </div>
           </template>
 
-          <UAlert
-            v-if="jobAtual.status === 'erro'"
-            color="error"
-            variant="soft"
-            icon="i-lucide-triangle-alert"
-            title="Falhou"
-            :description="jobAtual.error || 'erro desconhecido'"
-          />
-
-          <template v-else-if="emAndamento">
-            <p v-if="jobAtual.status === 'na_fila'" class="text-sm text-muted mb-2">
-              <UIcon name="i-lucide-loader-circle" class="animate-spin size-4 align-[-2px]" />
-              aguardando o worker pegar o job…
+          <!-- ERRO: mensagem amigável -->
+          <div v-if="jobAtual.status === 'erro'" class="text-center py-8">
+            <UIcon name="i-lucide-circle-x" class="size-10 mx-auto text-error mb-3" />
+            <p class="font-medium">Não foi possível concluir desta vez.</p>
+            <p class="text-sm text-muted mt-1">
+              Tente executar de novo. Se continuar, avise o administrador.
             </p>
-            <pre
-              v-if="logs.length"
-              class="text-xs font-mono bg-muted rounded-lg p-3 max-h-80 overflow-auto whitespace-pre-wrap"
-            >{{ logsTexto }}</pre>
-            <p v-else class="text-sm text-muted">iniciando…</p>
-          </template>
+          </div>
 
-          <template v-else-if="jobAtual.status === 'concluido'">
+          <!-- PROCESSANDO: estado amigável -->
+          <div v-else-if="emAndamento" class="text-center py-10">
+            <UIcon name="i-lucide-loader-circle" class="size-10 mx-auto text-primary animate-spin mb-3" />
+            <p class="font-medium">
+              {{ jobAtual.status === 'na_fila' ? 'Na fila, começando já já…' : 'Processando, aguarde…' }}
+            </p>
+            <p class="text-sm text-muted mt-1">Isso pode levar de alguns segundos a uns minutos.</p>
+          </div>
+
+          <!-- CONCLUÍDO -->
+          <template v-else-if="concluido">
             <ChecklistResultado v-if="dadosAtual" :dados="dadosAtual" />
-            <pre
-              v-else
-              class="text-xs sm:text-sm font-mono bg-muted rounded-lg p-4 max-h-[34rem] overflow-auto whitespace-pre-wrap leading-relaxed"
-            >{{ jobAtual.result_preview }}</pre>
-
-            <div v-if="logs.length" class="mt-3">
-              <UButton
-                :icon="mostrarLogs ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-                color="neutral"
-                variant="link"
-                size="xs"
-                :label="mostrarLogs ? 'ocultar logs' : 'ver logs da execução'"
-                class="px-0"
-                @click="mostrarLogs = !mostrarLogs"
-              />
-              <pre
-                v-if="mostrarLogs"
-                class="text-xs font-mono bg-muted rounded-lg p-3 max-h-72 overflow-auto whitespace-pre-wrap mt-1"
-              >{{ logsTexto }}</pre>
+            <div v-else>
+              <p class="text-sm text-muted mb-2">Resultado pronto — copie e cole onde precisar:</p>
+              <pre class="text-sm whitespace-pre-wrap leading-relaxed rounded-lg border border-default bg-elevated/40 p-4 max-h-[34rem] overflow-auto font-sans">{{ jobAtual.result_preview }}</pre>
             </div>
           </template>
+
+          <!-- detalhes técnicos: só admin -->
+          <div v-if="isAdmin && logs.length" class="mt-3">
+            <UButton
+              :icon="mostrarLogs ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+              color="neutral"
+              variant="link"
+              size="xs"
+              :label="mostrarLogs ? 'ocultar detalhes técnicos' : 'ver detalhes técnicos'"
+              class="px-0"
+              @click="mostrarLogs = !mostrarLogs"
+            />
+            <pre v-if="mostrarLogs" class="text-xs font-mono bg-muted rounded-lg p-3 max-h-72 overflow-auto whitespace-pre-wrap mt-1">{{ logsTexto }}</pre>
+          </div>
         </UCard>
 
         <!-- Histórico -->
@@ -361,14 +309,11 @@ onUnmounted(() => {
 
               <template v-if="abertoId === j.id">
                 <ChecklistResultado v-if="parseDados(j)" :dados="parseDados(j)" class="mt-2" />
-                <pre
-                  v-else
-                  class="text-xs font-mono bg-muted rounded-lg p-3 max-h-96 overflow-auto whitespace-pre-wrap mt-2"
-                >{{ j.result_preview }}</pre>
+                <pre v-else class="text-sm whitespace-pre-wrap leading-relaxed rounded-lg border border-default bg-elevated/40 p-4 max-h-96 overflow-auto font-sans mt-2">{{ j.result_preview }}</pre>
               </template>
 
-              <p v-if="j.status === 'erro'" class="text-xs text-error mt-1 truncate">
-                {{ j.error }}
+              <p v-if="j.status === 'erro'" class="text-xs text-muted mt-1">
+                Não concluiu — tente de novo.
               </p>
             </div>
           </div>
