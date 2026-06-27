@@ -30,7 +30,6 @@ const iconePorSlug: Record<string, string> = {
   'remover-linhas': 'i-lucide-trash-2',
 }
 
-// ── parâmetros ─────────────────────────────────────────────────
 const campos = computed(() =>
   Object.entries(sistema.value?.param_schema ?? {}).map(([key, def]) => ({ key, ...(def as any) })),
 )
@@ -39,7 +38,6 @@ watchEffect(() => {
   for (const c of campos.value) if (!(c.key in paramsModel)) paramsModel[c.key] = c.default ?? ''
 })
 
-// ── execução atual ─────────────────────────────────────────────
 const jobAtual = ref<Job | null>(null)
 const logs = ref<JobLog[]>([])
 const enviando = ref(false)
@@ -65,7 +63,6 @@ function parseDados(j: Job | null): any | null {
 }
 const dadosAtual = computed(() => parseDados(jobAtual.value))
 
-// ── histórico ──────────────────────────────────────────────────
 const { data: historico, refresh: refreshHistorico } = await useAsyncData(
   () => `jobs-${slug.value}`,
   async () => {
@@ -155,11 +152,12 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
     </template>
 
     <template #body>
-      <template v-if="sistema">
-        <p class="text-sm text-muted mb-5">{{ sistema.description }}</p>
+      <!-- wrapper único: evita que os cards virem "flex items" do body e se espremam -->
+      <div v-if="sistema" class="space-y-6">
+        <p class="text-sm text-muted">{{ sistema.description }}</p>
 
         <!-- Executar -->
-        <UCard class="mb-6">
+        <UCard>
           <div class="flex flex-col gap-4">
             <UAlert
               v-if="ehDestrutivo"
@@ -197,17 +195,15 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
         </UCard>
 
         <!-- Resultado / execução (amigável) -->
-        <UCard v-if="jobAtual" class="mb-6">
+        <UCard v-if="jobAtual">
           <template #header>
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2">
-                <UBadge
-                  :color="statusInfo[jobAtual.status].color"
-                  variant="subtle"
-                  :icon="statusInfo[jobAtual.status].icon"
-                  :label="statusInfo[jobAtual.status].label"
-                />
-              </div>
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <UBadge
+                :color="statusInfo[jobAtual.status].color"
+                variant="subtle"
+                :icon="statusInfo[jobAtual.status].icon"
+                :label="statusInfo[jobAtual.status].label"
+              />
               <div v-if="concluido" class="flex items-center gap-2">
                 <UButton
                   v-if="!ehChecklist"
@@ -229,16 +225,12 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
             </div>
           </template>
 
-          <!-- ERRO: mensagem amigável -->
           <div v-if="jobAtual.status === 'erro'" class="text-center py-8">
             <UIcon name="i-lucide-circle-x" class="size-10 mx-auto text-error mb-3" />
             <p class="font-medium">Não foi possível concluir desta vez.</p>
-            <p class="text-sm text-muted mt-1">
-              Tente executar de novo. Se continuar, avise o administrador.
-            </p>
+            <p class="text-sm text-muted mt-1">Tente executar de novo. Se continuar, avise o administrador.</p>
           </div>
 
-          <!-- PROCESSANDO: estado amigável -->
           <div v-else-if="emAndamento" class="text-center py-10">
             <UIcon name="i-lucide-loader-circle" class="size-10 mx-auto text-primary animate-spin mb-3" />
             <p class="font-medium">
@@ -247,16 +239,14 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
             <p class="text-sm text-muted mt-1">Isso pode levar de alguns segundos a uns minutos.</p>
           </div>
 
-          <!-- CONCLUÍDO -->
           <template v-else-if="concluido">
             <ChecklistResultado v-if="dadosAtual" :dados="dadosAtual" />
             <div v-else>
               <p class="text-sm text-muted mb-2">Resultado pronto — copie e cole onde precisar:</p>
-              <pre class="text-sm whitespace-pre-wrap leading-relaxed rounded-lg border border-default bg-elevated/40 p-4 max-h-[34rem] overflow-auto font-sans">{{ jobAtual.result_preview }}</pre>
+              <pre class="text-sm whitespace-pre-wrap break-words leading-relaxed rounded-lg border border-default bg-elevated/40 p-4 max-h-[34rem] overflow-auto font-sans">{{ jobAtual.result_preview }}</pre>
             </div>
           </template>
 
-          <!-- detalhes técnicos: só admin -->
           <div v-if="isAdmin && logs.length" class="mt-3">
             <UButton
               :icon="mostrarLogs ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
@@ -267,7 +257,7 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
               class="px-0"
               @click="mostrarLogs = !mostrarLogs"
             />
-            <pre v-if="mostrarLogs" class="text-xs font-mono bg-muted rounded-lg p-3 max-h-72 overflow-auto whitespace-pre-wrap mt-1">{{ logsTexto }}</pre>
+            <pre v-if="mostrarLogs" class="text-xs font-mono bg-muted rounded-lg p-3 max-h-72 overflow-auto whitespace-pre-wrap break-words mt-1">{{ logsTexto }}</pre>
           </div>
         </UCard>
 
@@ -278,7 +268,7 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
           </template>
           <div v-if="historico && historico.length" class="divide-y divide-default">
             <div v-for="j in historico" :key="j.id" class="py-2.5">
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
                 <UBadge
                   :color="statusInfo[j.status].color"
                   variant="subtle"
@@ -286,7 +276,7 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
                   :icon="statusInfo[j.status].icon"
                   :label="statusInfo[j.status].label"
                 />
-                <span class="text-sm text-muted">{{ fmtData(j.created_at) }}</span>
+                <span class="text-xs sm:text-sm text-muted">{{ fmtData(j.created_at) }}</span>
                 <span class="ml-auto" />
                 <UButton
                   v-if="j.status === 'concluido' && j.result_preview"
@@ -309,17 +299,15 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
 
               <template v-if="abertoId === j.id">
                 <ChecklistResultado v-if="parseDados(j)" :dados="parseDados(j)" class="mt-2" />
-                <pre v-else class="text-sm whitespace-pre-wrap leading-relaxed rounded-lg border border-default bg-elevated/40 p-4 max-h-96 overflow-auto font-sans mt-2">{{ j.result_preview }}</pre>
+                <pre v-else class="text-sm whitespace-pre-wrap break-words leading-relaxed rounded-lg border border-default bg-elevated/40 p-4 max-h-96 overflow-auto font-sans mt-2">{{ j.result_preview }}</pre>
               </template>
 
-              <p v-if="j.status === 'erro'" class="text-xs text-muted mt-1">
-                Não concluiu — tente de novo.
-              </p>
+              <p v-if="j.status === 'erro'" class="text-xs text-muted mt-1">Não concluiu — tente de novo.</p>
             </div>
           </div>
           <p v-else class="text-sm text-muted">Nenhuma execução ainda.</p>
         </UCard>
-      </template>
+      </div>
 
       <div v-else class="text-center py-16 text-muted">
         <UIcon name="i-lucide-lock" class="size-8 mx-auto mb-2" />

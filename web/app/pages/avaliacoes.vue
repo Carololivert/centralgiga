@@ -132,6 +132,7 @@ const badge: Record<GiganetStatus, { label: string, color: any }> = {
     </template>
 
     <template #body>
+      <div>
       <div class="flex flex-wrap gap-2 mb-5">
         <UButton
           v-for="v in (['pending', 'approved', 'rejected', 'all'] as View[])"
@@ -224,6 +225,7 @@ const badge: Record<GiganetStatus, { label: string, color: any }> = {
       <div v-else class="text-center py-16 text-muted">
         <UIcon name="i-lucide-inbox" class="size-8 mx-auto mb-2" />
         <p>{{ view === 'pending' ? 'Nenhuma avaliação aguardando aprovação.' : 'Nada por aqui.' }}</p>
+      </div>
       </div>
     </template>
   </UDashboardPanel>
