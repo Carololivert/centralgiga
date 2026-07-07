@@ -9,7 +9,7 @@ remover_linhas.py
    e aceita o popup "Deseja realmente excluir a Linha?".
 
 >>> SEGURANÇA:
-   - DRY_RUN = False  -> só SIMULA (mostra o que removeria, NÃO remove). Padrão.
+   - DRY_RUN = True   -> só SIMULA (mostra o que removeria, NÃO remove). Padrão.
    - Troque para False só depois de conferir a simulação.
    - HEADLESS = False -> você vê o navegador removendo (recomendado nas 1as vezes).
 """
@@ -34,7 +34,7 @@ LOGIN_URL  = f"{SGP_BASE}/accounts/login"
 REPORT_URL = f"{SGP_BASE}/admin/relatorios/contrato/status/"
 
 # ---- TRAVAS DE SEGURANÇA ---------------------------------------------------
-DRY_RUN  = False     # True = só simula | False = remove de verdade
+DRY_RUN  = True      # True = só simula (padrão) | False = remove de verdade
 HEADLESS = False    # False = você vê o navegador
 
 # ---- Período a varrer ------------------------------------------------------
@@ -70,16 +70,16 @@ def registrar(numero, contrato, cliente, url, status):
 def login_sgp(session):
     session.headers.update({"User-Agent": "Mozilla/5.0", "Referer": LOGIN_URL})
     v = ssl_verify_enabled()
-    soup = BeautifulSoup(session.get(LOGIN_URL, verify=v).text, "html.parser")
+    soup = BeautifulSoup(session.get(LOGIN_URL, verify=v, timeout=30).text, "html.parser")
     tok = soup.find("input", {"name": "csrfmiddlewaretoken"})
     payload = {"username": os.getenv("SGP_USER"), "password": os.getenv("SGP_PASS")}
     if tok:
         payload["csrfmiddlewaretoken"] = tok["value"]
-    session.post(LOGIN_URL, data=payload, allow_redirects=True, verify=v).raise_for_status()
+    session.post(LOGIN_URL, data=payload, allow_redirects=True, verify=v, timeout=30).raise_for_status()
 
 
 def obter_tokens(session):
-    soup = BeautifulSoup(session.get(REPORT_URL, verify=ssl_verify_enabled()).text, "html.parser")
+    soup = BeautifulSoup(session.get(REPORT_URL, verify=ssl_verify_enabled(), timeout=30).text, "html.parser")
     return {n: soup.find("input", {"name": n})["value"]
             for n in ("csrfmiddlewaretoken", "dpb_token") if soup.find("input", {"name": n})}
 
@@ -154,9 +154,9 @@ def descobrir():
 
     servicos = {}  # servico_url -> (numero, contrato, cliente)
     for ano, mes in meses(ANO_INICIO, MES_INICIO, ANO_FIM, MES_FIM):
-        rep = s.get(REPORT_URL, params=build_params(ano, mes, tokens), verify=ssl_verify_enabled())
+        rep = s.get(REPORT_URL, params=build_params(ano, mes, tokens), verify=ssl_verify_enabled(), timeout=30)
         for label, client_url in parse_contratos(rep.text):
-            html = s.get(client_url, verify=ssl_verify_enabled()).text
+            html = s.get(client_url, verify=ssl_verify_enabled(), timeout=30).text
             for numero, surl in extrair_servicos(html):
                 num_c, _, nome = label.partition(" - ")
                 servicos.setdefault(surl, (numero, num_c.strip(), nome.strip()))

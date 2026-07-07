@@ -5,7 +5,7 @@ Três peças:
 | Peça | Onde | Por quê |
 |---|---|---|
 | **web** (Nuxt 4) | **Vercel** | front + API routes (avaliações). Serverless. |
-| **worker** (Python + Playwright) | **easypanel** (Docker) ou **VPS** | precisa de Chromium → não roda em serverless. |
+| **worker** (Python + Playwright) | **easypanel** (Docker) ou **VPS** | Remover Linhas usa Chromium → não roda em serverless. |
 | **banco** (Supabase) | já configurado | nada a fazer (migrations 0001–0006 aplicadas). |
 
 > Os valores das variáveis estão nos seus arquivos locais `web/.env` e `worker/.env`.
@@ -50,13 +50,17 @@ O worker tem um **`Dockerfile`** pronto (Python + Chromium do Playwright).
    SUPABASE_URL               = https://SEU-PROJETO.supabase.co
    SUPABASE_SERVICE_ROLE_KEY  = (worker/.env)
    RESULT_BUCKET              = resultados
+   # SGP via API oficial (Token/App) — Relatório de OS, Termos, Verificar Vendas:
+   SGP_BASE                   = https://giganetwireless.sgp.net.br
+   SGP_TOKEN                  = (worker/.env)
+   SGP_APP                    = (worker/.env)
+   # SGP via login web — Conferência de Checklist, Linhas Canceladas, Remover Linhas:
    SGP_USER                   = (worker/.env)
    SGP_PASS                   = (worker/.env)
    SGP_VERIFY_SSL             = false
-   FOCUS_USER                 = (worker/.env)
-   FOCUS_PASS                 = (worker/.env)
-   OPENROUTER_API_KEY         = (worker/.env)   # ou ANTHROPIC_API_KEY p/ a IA do checklist
-   OPENROUTER_MODEL           = meta-llama/llama-3-70b-instruct
+   SGP_2FA_SECRET             = (worker/.env)   # segredo TOTP, se o login web exigir 2FA
+   # FocusChat via API oficial (Token do Canal) — Verificar Vendas:
+   FOCUS_TOKEN                = (worker/.env)
    WORKER_POLL_SECONDS        = 5
    ```
 3. Sem porta exposta (o worker só faz chamadas de saída). Deixe **restart: always**.

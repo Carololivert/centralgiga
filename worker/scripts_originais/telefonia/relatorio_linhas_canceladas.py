@@ -60,13 +60,13 @@ def login_sgp(session: requests.Session) -> None:
     if not user or not pwd:
         raise Exception("SGP_USER / SGP_PASS não definidos no .env")
     v = ssl_verify_enabled()
-    res = session.get(LOGIN_URL, verify=v)
+    res = session.get(LOGIN_URL, verify=v, timeout=30)
     soup = BeautifulSoup(res.text, "html.parser")
     tok = soup.find("input", {"name": "csrfmiddlewaretoken"})
     payload = {"username": user, "password": pwd}
     if tok:
         payload["csrfmiddlewaretoken"] = tok["value"]
-    session.post(LOGIN_URL, data=payload, allow_redirects=True, verify=v).raise_for_status()
+    session.post(LOGIN_URL, data=payload, allow_redirects=True, verify=v, timeout=30).raise_for_status()
 
 
 # =========================
@@ -87,7 +87,7 @@ def meses_no_intervalo(ano_i, mes_i, ano_f, mes_f):
 
 def obter_tokens(session: requests.Session) -> dict:
     """Pega os campos escondidos exigidos pelo formulário (dpb_token, csrf...)."""
-    r = session.get(REPORT_URL, verify=ssl_verify_enabled())
+    r = session.get(REPORT_URL, verify=ssl_verify_enabled(), timeout=30)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
     tokens = {}
@@ -142,7 +142,7 @@ def parse_contratos(html: str):
 # EXTRAÇÃO DO "LINHAS"
 # =========================
 def extrair_linhas(session: requests.Session, url: str):
-    r = session.get(url, verify=ssl_verify_enabled())
+    r = session.get(url, verify=ssl_verify_enabled(), timeout=30)
     r.raise_for_status()
     texto = BeautifulSoup(r.text, "html.parser").get_text("\n")
 
@@ -216,7 +216,7 @@ def main():
     rows = []
     for ano, mes in meses_no_intervalo(ANO_INICIO, MES_INICIO, ANO_FIM, MES_FIM):
         print(f"\n=== {mes:02d}/{ano} ===")
-        r = session.get(REPORT_URL, params=build_params(ano, mes, tokens), verify=ssl_verify_enabled())
+        r = session.get(REPORT_URL, params=build_params(ano, mes, tokens), verify=ssl_verify_enabled(), timeout=30)
         r.raise_for_status()
 
         contratos = parse_contratos(r.text)

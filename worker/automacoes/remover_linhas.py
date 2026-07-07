@@ -1,13 +1,13 @@
-"""Adapter: Remover Linhas (scripts_originais/remover_linhas.py).
+"""Adapter: Remover Linhas (scripts_originais/telefonia/remover_linhas.py).
 
 AÇÃO DESTRUTIVA — remove no SGP as linhas de telefonia de contratos cancelados.
 Por padrão roda em SIMULAÇÃO (dry_run=True): só mostra o que removeria.
-Playwright. Só admin. Auditável."""
+Playwright + login web (SGP_USER/SGP_PASS). Só admin. Auditável."""
 from contextlib import redirect_stdout
 
 from .base import BaseAutomacao, Resultado
 from .linhas_canceladas import intervalo
-from .runner import LogWriter
+from .runner import LogWriter, carregar_script
 
 
 class RemoverLinhas(BaseAutomacao):
@@ -19,7 +19,11 @@ class RemoverLinhas(BaseAutomacao):
     auditavel = True
 
     def run(self, params: dict, log) -> Resultado:
-        from scripts_originais import remover_linhas as R
+        from .sgp_auth import login_playwright, login_requests
+
+        R = carregar_script("telefonia/remover_linhas.py")
+        R.login_sgp = login_requests        # fase descobrir() (requests) — com 2FA
+        R.login_playwright = login_playwright  # fase de remoção (Playwright) — com 2FA
 
         v = params.get("dry_run", True)
         dry = True if v is None else bool(v)

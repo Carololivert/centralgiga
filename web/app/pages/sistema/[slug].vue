@@ -34,8 +34,15 @@ const campos = computed(() =>
   Object.entries(sistema.value?.param_schema ?? {}).map(([key, def]) => ({ key, ...(def as any) })),
 )
 const paramsModel = reactive<Record<string, any>>({})
+function hojeISO() {
+  return new Date().toLocaleDateString('en-CA') // yyyy-mm-dd no fuso local
+}
 watchEffect(() => {
-  for (const c of campos.value) if (!(c.key in paramsModel)) paramsModel[c.key] = c.default ?? ''
+  for (const c of campos.value) {
+    if (c.key in paramsModel) continue
+    // campo de data começa preenchido com hoje (a não ser que o schema traga default)
+    paramsModel[c.key] = c.default ?? (c.type === 'date' ? hojeISO() : '')
+  }
 })
 
 const jobAtual = ref<Job | null>(null)
@@ -176,6 +183,7 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
                 </div>
                 <UFormField v-else :label="c.label || c.key" :required="c.required">
                   <USelect v-if="c.type === 'select'" v-model="paramsModel[c.key]" :items="c.options" class="w-full" />
+                  <UInput v-else-if="c.type === 'date'" v-model="paramsModel[c.key]" type="date" class="w-full" />
                   <UInput v-else v-model="paramsModel[c.key]" class="w-full" />
                 </UFormField>
               </template>

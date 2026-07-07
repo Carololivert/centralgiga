@@ -4,9 +4,10 @@ Processo Python que observa a fila de `jobs` no Supabase, executa a automação
 correspondente (reaproveitando os scripts de `scripts_originais/`) e grava
 logs ao vivo + resultado de volta.
 
-> Os scripts atuais usam `requests` + `BeautifulSoup` (**não** Playwright),
-> então o worker é leve: não precisa de Chromium. Roda no seu PC ou num VPS.
-> A `service_role` key fica **só aqui**.
+> A maioria das automações agora usa **API oficial** do SGP (Token/App, sem 2FA)
+> e do FocusChat (Token do Canal). Só **Remover Linhas** precisa de Chromium
+> (Playwright) — por isso o worker roda no seu PC, num VPS ou no easypanel, não
+> em serverless. A `service_role` key fica **só aqui**.
 
 ## Estrutura
 
@@ -14,16 +15,30 @@ logs ao vivo + resultado de volta.
 worker/
 ├─ worker.py                 # loop: claim_next_job → executa → grava resultado
 ├─ config.py                 # .env + client Supabase (service_role)
-├─ automacoes/
+├─ automacoes/               # adapters: slug → chama o script e monta o Resultado
 │  ├─ base.py                # BaseAutomacao / Resultado / Arquivo
-│  ├─ runner.py              # roda scripts e transmite stdout p/ log ao vivo
+│  ├─ runner.py              # subprocess (log ao vivo) + carregar_script (importlib)
 │  ├─ registry.py            # slug → automação
-│  └─ relatorio_os.py        # adapter do main.py (Etapa 3)
-├─ scripts_originais/        # cópia fiel dos scripts do Aut-SGP
+│  └─ *.py                   # um adapter por sistema (relatorio_os, termos, …)
+├─ scripts_originais/        # código das automações (repo automacoes-main)
+│  ├─ comum/                 # módulos compartilhados: sgp_api, focus_api, sgp_login
+│  ├─ relatorios/            # main.py (Relatório de OS), termos_agendados.py
+│  ├─ vendas/                # vendas_focus_sgp.py (Verificar Vendas)
+│  ├─ telefonia/             # relatorio_linhas_canceladas.py, remover_linhas.py
+│  └─ conferencia-os/        # checklist_equipe.py (engine da Conferência)
 ├─ requirements.txt
 ├─ .env.example
 └─ deploy/worker.service
 ```
+
+## Como as credenciais são usadas
+
+| Automação | Acesso | Credenciais |
+|---|---|---|
+| Relatório de OS, Termos Agendados | SGP API (URA) | `SGP_TOKEN` / `SGP_APP` |
+| Verificar Vendas | FocusChat API + SGP API | `FOCUS_TOKEN`, `SGP_TOKEN` / `SGP_APP` |
+| Conferência de Checklist | SGP login web | `SGP_USER` / `SGP_PASS` |
+| Linhas Canceladas, Remover Linhas | SGP login web (+ Chromium) | `SGP_USER` / `SGP_PASS` |
 
 ## Rodar localmente (Windows/PowerShell)
 

@@ -1,7 +1,7 @@
-"""Adapter: Linhas Canceladas (scripts_originais/relatorio_linhas_canceladas.py).
+"""Adapter: Linhas Canceladas (scripts_originais/telefonia/relatorio_linhas_canceladas.py).
 
 requests + openpyxl. Varre contratos de telefone cancelados e gera Excel +
-lista de números livres. Leitura (não altera nada)."""
+lista de números livres. Login web no SGP (SGP_USER/SGP_PASS). Leitura."""
 import io
 from contextlib import redirect_stdout
 from datetime import datetime
@@ -9,7 +9,7 @@ from datetime import datetime
 import requests
 
 from .base import Arquivo, BaseAutomacao, Resultado
-from .runner import LogWriter
+from .runner import LogWriter, carregar_script
 
 
 def intervalo(periodo: str) -> tuple[int, int, int, int]:
@@ -34,7 +34,9 @@ class LinhasCanceladas(BaseAutomacao):
     parametros = {"periodo": "Este mês"}
 
     def run(self, params: dict, log) -> Resultado:
-        from scripts_originais import relatorio_linhas_canceladas as R
+        from .sgp_auth import login_requests
+
+        R = carregar_script("telefonia/relatorio_linhas_canceladas.py")
 
         periodo = (params.get("periodo") or "Este mês").strip()
         ai, mi, af, mf = intervalo(periodo)
@@ -46,7 +48,7 @@ class LinhasCanceladas(BaseAutomacao):
 
         with redirect_stdout(LogWriter(log)):
             session = requests.Session()
-            R.login_sgp(session)
+            login_requests(session)  # login web com 2FA
             tokens = R.obter_tokens(session)
             for ano, mes in R.meses_no_intervalo(ai, mi, af, mf):
                 print(f"=== {mes:02d}/{ano} ===")
@@ -54,6 +56,7 @@ class LinhasCanceladas(BaseAutomacao):
                     R.REPORT_URL,
                     params=R.build_params(ano, mes, tokens),
                     verify=R.ssl_verify_enabled(),
+                    timeout=30,
                 )
                 r.raise_for_status()
                 contratos = R.parse_contratos(r.text)

@@ -20,6 +20,7 @@ worker/*.xlsx
 
 # ── pastas de "drop" dos scripts atualizados (a fonte vai p/ worker/scripts_originais) ──
 Aut-SGP-main*/
+automacoes-main/
 *.zip
 
 # ── diversos ──

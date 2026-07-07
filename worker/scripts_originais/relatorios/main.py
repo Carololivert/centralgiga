@@ -1,122 +1,52 @@
+#!/usr/bin/env python3
+"""
+main.py — Relatório de produção do dia por equipe (GIGANET).
+
+Migrado para a API oficial do SGP (endpoint /api/os/list/, via comum/sgp_api.py).
+NÃO usa mais login web nem raspagem de HTML, então NÃO depende de 2FA.
+
+Uso:
+    python relatorios\\main.py
+"""
+
 import os
 import re
-import requests
+import sys
 import unicodedata
-from datetime import datetime
-from bs4 import BeautifulSoup
-from datetime import timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
+# --- torna comum/ importável e carrega o .env da raiz ---
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_RAIZ, "comum"))
+from dotenv import load_dotenv
+load_dotenv(os.path.join(_RAIZ, ".env"))
+
+from sgp_api import listar_os
 
 TZ_BR = ZoneInfo("America/Sao_Paulo")
 
 
 def agora_br() -> datetime:
     return datetime.now(TZ_BR).replace(tzinfo=None)
-from dotenv import load_dotenv
-from urllib3.exceptions import InsecureRequestWarning
 
 
-load_dotenv()
-
-
-def ssl_verify_enabled() -> bool:
-    return os.getenv("SGP_VERIFY_SSL", "true").strip().lower() not in {"0", "false", "no", "off"}
-
-
-if not ssl_verify_enabled():
-    requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
-
-
-# =========================
-# 1) LOGIN (SGP)
-# =========================
-def login_sgp(session: requests.Session) -> None:
-    login_url = "https://giganetwireless.sgp.net.br/accounts/login"
-
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0",
-        "Referer": login_url
-    })
-
-    username = os.getenv("SGP_USER")
-    password = os.getenv("SGP_PASS")
-    if not username or not password:
-        raise Exception("Variáveis de ambiente SGP_USER ou SGP_PASS não definidas")
-
-    verify_ssl = ssl_verify_enabled()
-
-    res = session.get(login_url, verify=verify_ssl)
-    res.raise_for_status()
-
-    soup = BeautifulSoup(res.text, "html.parser")
-    token_input = soup.find("input", {"name": "csrfmiddlewaretoken"})
-    csrf = token_input["value"] if token_input else None
-
-    payload = {"username": username, "password": password}
-    if csrf:
-        payload["csrfmiddlewaretoken"] = csrf
-
-    login_res = session.post(login_url, data=payload, allow_redirects=True, verify=verify_ssl)
-    login_res.raise_for_status()
-
-
-# =========================
-# 2) RELATÓRIO: TABELA OS
-# =========================
-REPORT_URL = "https://giganetwireless.sgp.net.br/admin/atendimento/relatorios/ocorrencia/os/"
-
-MOTIVOS_ESPECIAIS = {
-    "Mudança Endereço - casa",
-    "Mudança Endereço - apartamento Condomínios",
-    "Instalação de KIT - apartamento Condomínios",
-    "Mudança Endereço - apartamento/prédio geral",
-    "Instalação de KIT - casa",
-    "Instalação de KIT - apartamento/prédio geral",
-    "Remoção de KIT",
-    "Entrega de Carnê físico",
-}
-
-def build_params_for_day(day: datetime) -> dict:
-    d = day.strftime("%d/%m/%Y")
+# ============================================================
+# ADAPTADOR: OS da API -> mesmas "colunas" que a lógica usa
+# ============================================================
+def _adaptar(os_item: dict) -> dict:
+    aux = os_item.get("tecnicos_auxiliares") or []
     return {
-        "status": "1",
-        "paginate_by": "",
-        "data_agendamento_inicial": f"{d} 00:00:00",
-        "data_agendamento_final": f"{d} 23:59:59",
-        "contrato_id": "",
-        "os_id": "",
-        "tipoos": "",
-        "usuario": "",
-        "veiculo": "",
+        "Responsavel": (os_item.get("responsavel") or "").strip(),
+        "Motivo": (os_item.get("motivo") or "").strip(),
+        "Pop": (os_item.get("pop") or "").strip(),
+        "Tecnico Auxiliar": "\n".join(a for a in aux if a),
     }
 
-def parse_table_rows(html: str) -> list[dict]:
-    soup = BeautifulSoup(html, "html.parser")
 
-    table = soup.select_one("table#DataTables_Table_0") or soup.select_one("table")
-    if not table:
-        raise Exception("Não achei nenhuma tabela na página. Precisamos ajustar o seletor do table.")
-
-    header_cells = table.select("thead th")
-    headers = [h.get_text(strip=True) for h in header_cells]
-
-    rows = []
-    for tr in table.select("tbody tr"):
-        tds = tr.select("td")
-        if not tds:
-            continue
-
-        values = []
-        for i, td in enumerate(tds):
-            header = headers[i] if i < len(headers) else ""
-            separator = "\n" if is_auxiliar_header(header) else " "
-            values.append(td.get_text(separator, strip=True))
-        row = {headers[i]: (values[i] if i < len(values) else "") for i in range(len(headers))}
-        rows.append(row)
-
-    return rows
-
-
+# ============================================================
+# HELPERS (iguais aos seus)
+# ============================================================
 def normalize_text(text: str) -> str:
     text = unicodedata.normalize("NFKD", text)
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
@@ -160,7 +90,6 @@ def first_name(nome: str) -> str:
 def format_tecnicos(tecnicos: list[str] | None) -> str:
     nomes = [first_name(t) for t in (tecnicos or [])]
     nomes = [n for n in nomes if n]
-
     if not nomes:
         return ""
     if len(nomes) == 1:
@@ -173,15 +102,12 @@ def format_tecnicos(tecnicos: list[str] | None) -> str:
 def extract_team_tecnicos(rows: list[dict], equipe_nome: str) -> list[str]:
     tecnicos = []
     vistos = set()
-
     for row in rows:
         if row_value(row, "Responsavel") != equipe_nome:
             continue
-
         aux_key = find_auxiliar_key(row)
         if not aux_key:
             continue
-
         for nome_completo in row.get(aux_key, "").splitlines():
             nome = first_name(nome_completo)
             if nome and nome not in vistos:
@@ -189,8 +115,8 @@ def extract_team_tecnicos(rows: list[dict], equipe_nome: str) -> list[str]:
                 vistos.add(nome)
             if len(tecnicos) == 2:
                 return tecnicos
-
     return tecnicos
+
 
 def fibra_num_from_pop(pop_text: str) -> str | None:
     m = re.search(r"Fibra\s*(\d+)", pop_text, re.IGNORECASE)
@@ -199,9 +125,9 @@ def fibra_num_from_pop(pop_text: str) -> str | None:
     m2 = re.search(r"(\d+)", pop_text)
     return m2.group(1) if m2 else None
 
+
 def classify_motivo(motivo: str) -> str:
     m = motivo.strip()
-
     if m.startswith("Mudança Endereço - casa"):
         return "Mudança Endereço - casa"
     if m.startswith("Mudança Endereço - apartamento/prédio geral"):
@@ -218,16 +144,10 @@ def classify_motivo(motivo: str) -> str:
         return "Remoção de KIT"
     if m.startswith("Entrega de Carnê físico"):
         return "Entrega de Carnê físico"
-    
-
     return "Corretiva"
 
-def build_team_report(
-    rows: list[dict],
-    equipe_nome: str,
-    veiculo: str | None = None,
-    tecnicos: list[str] | None = None
-) -> str:
+
+def build_team_report(rows, equipe_nome, veiculo=None, tecnicos=None) -> str:
     equipe_rows = [r for r in rows if row_value(r, "Responsavel") == equipe_nome]
     total_os = len(equipe_rows)
 
@@ -245,16 +165,12 @@ def build_team_report(
 
     fibras = []
     for r in equipe_rows:
-        motivo = row_value(r, "Motivo")
-        categoria = classify_motivo(motivo)
-
+        categoria = classify_motivo(row_value(r, "Motivo"))
         if categoria in contagem:
             contagem[categoria] += 1
         else:
             contagem["Corretiva"] += 1
-
-        pop = row_value(r, "Pop") or row_value(r, "POP")
-        fibra = fibra_num_from_pop(pop)
+        fibra = fibra_num_from_pop(row_value(r, "Pop") or row_value(r, "POP"))
         if fibra:
             fibras.append(fibra)
 
@@ -290,17 +206,18 @@ def build_team_report(
     if contagem["Mudança Endereço - apartamento/prédio geral"]:
         linhas.append(f"{contagem['Mudança Endereço - apartamento/prédio geral']:02d} Mudança Endereço - apartamento/prédio geral")
     if contagem["Mudança Endereço - apartamento Condomínios"]:
-        linhas.append(f"{contagem['Mudança Endereço - apartamento Condomínios']:02d} Mudança Endereço - apartamento Condomínios")    
+        linhas.append(f"{contagem['Mudança Endereço - apartamento Condomínios']:02d} Mudança Endereço - apartamento Condomínios")
 
     linhas.append(f"Total de ordens finalizadas= {total_os:02d}/Total de fichas inclusas= {fichas_inclusas:02d}")
     linhas.append("Check ins incorretos(SGP): 01")
     linhas.append(f"Fibras atendidas: {fibras_fmt}")
-
     return "\n".join(linhas)
+
 
 def is_os_valida(r: dict) -> bool:
     resp = row_value(r, "Responsavel").upper()
     return resp in {f"EQUIPE {c}" for c in "ABCDEFGHI"}
+
 
 def extract_equipes(rows: list[dict]) -> list[str]:
     equipes = {
@@ -314,16 +231,13 @@ def extract_equipes(rows: list[dict]) -> list[str]:
     )
 
 
-
 def build_resumo_geral(rows_concluidas: list[dict], hoje: datetime) -> str:
     amanha = hoje + timedelta(days=1)
     ontem = hoje - timedelta(days=1)
 
-    # fixos como você pediu
     total_previstas_ontem = 45
     fichas_encaminhadas_grupo = 8
 
-    # contar só ordens válidas (equipes A-I)
     rows_validas = [r for r in rows_concluidas if is_os_valida(r)]
 
     contagem = {
@@ -339,28 +253,21 @@ def build_resumo_geral(rows_concluidas: list[dict], hoje: datetime) -> str:
     }
 
     for r in rows_validas:
-        motivo = row_value(r, "Motivo")
-        categoria = classify_motivo(motivo)
-
+        categoria = classify_motivo(row_value(r, "Motivo"))
         if categoria in contagem:
             contagem[categoria] += 1
         else:
             contagem["Corretiva"] += 1
 
-    # total finalizadas no dia = soma dos motivos (do jeito que você quer)
     total_finalizadas = sum(contagem.values())
-
-    # total instalações finalizadas = soma das instalações
     total_instalacoes = (
         contagem["Instalação de KIT - apartamento Condomínios"]
         + contagem["Instalação de KIT - casa"]
         + contagem["Instalação de KIT - apartamento/prédio geral"]
     )
-
-    # fichas inclusas no sgp = instalações (pela sua regra)
     fichas_sgp = total_instalacoes
 
-    texto = (
+    return (
         f"Relatório exclusivo das ordens CONCLUÍDAS! Todas as outras ordens pendentes ja foram realocadas para o dia {amanha.strftime('%d/%m')}!\n"
         f"Total de ordens previstas ontem ({ontem.strftime('%d/%m')}): {total_previstas_ontem}\n"
         f"Total de ordens finalizadas no dia: {total_finalizadas}\n"
@@ -368,11 +275,11 @@ def build_resumo_geral(rows_concluidas: list[dict], hoje: datetime) -> str:
         f"Total de fichas inclusas no sgp: {fichas_sgp}\n"
         f"Total de fichas encaminhadas no grupo: {fichas_encaminhadas_grupo:02d}"
     )
-    return texto
 
-# =========================
-# 3) CONFIG: EQUIPES A - I
-# =========================
+
+# ============================================================
+# CONFIG: EQUIPES A - I
+# ============================================================
 EQUIPES = {
     "EQUIPE A": {"veiculo": "Kwid G11", "tecnicos": []},
     "EQUIPE B": {"veiculo": "Mobi G09", "tecnicos": ["Hugo e", "Ricardo"]},
@@ -386,28 +293,25 @@ EQUIPES = {
 }
 
 
-# =========================
+# ============================================================
 # MAIN
-# =========================
+# ============================================================
 def main():
-    session = requests.Session()
-    login_sgp(session)
-
     hoje = agora_br()
-    params = build_params_for_day(hoje)
+    dia = hoje.strftime("%Y-%m-%d")   # formato que a API espera
 
-    r_rep = session.get(REPORT_URL, params=params, verify=ssl_verify_enabled())
-    r_rep.raise_for_status()
-
-    rows = parse_table_rows(r_rep.text)
-
+    # Todas as OS agendadas para hoje
+    os_list = listar_os(
+        data_agendamento_inicio=dia,
+        data_agendamento_fim=dia,
+    )
+    rows = [_adaptar(o) for o in os_list]
 
     print("#" * 60)
     print(build_resumo_geral(rows_concluidas=rows, hoje=hoje))
     print("#" * 60)
     print()
 
-    # gera relatório das equipes encontradas no dia
     for equipe_nome in extract_equipes(rows):
         info = EQUIPES.get(equipe_nome, {"veiculo": "", "tecnicos": []})
         tecnicos = extract_team_tecnicos(rows, equipe_nome) or info.get("tecnicos")
@@ -417,17 +321,12 @@ def main():
             veiculo=info.get("veiculo"),
             tecnicos=tecnicos,
         )
-
-        # pula equipes sem OS no dia
         if "Total de ordens finalizadas= 00" in rel:
             continue
-
         print("=" * 60)
         print(rel)
-        print()  # linha em branco
+        print()
 
 
 if __name__ == "__main__":
     main()
-
-

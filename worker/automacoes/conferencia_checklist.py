@@ -1,13 +1,13 @@
-"""Adapter: Conferência de Checklist (scripts_originais/checklist_equipe.py).
+"""Adapter: Conferência de Checklist (scripts_originais/conferencia-os/checklist_equipe.py).
 
-Importa gerar_relatorio_checklist(equipe) e usa o retorno estruturado.
-Gera um JSON compacto pra tela (painel por OS) e sobe o JSON completo no Storage.
-"""
+Carrega o módulo e usa gerar_relatorio_checklist(equipe) — retorno estruturado
+(avaliação por regras locais, sem IA). Gera um JSON compacto pra tela (painel por
+OS) e sobe o JSON completo no Storage."""
 import json
 from contextlib import redirect_stdout
 
 from .base import Arquivo, BaseAutomacao, Resultado
-from .runner import LogWriter
+from .runner import LogWriter, carregar_script
 
 
 class ConferenciaChecklist(BaseAutomacao):
@@ -18,13 +18,16 @@ class ConferenciaChecklist(BaseAutomacao):
     parametros = {"equipe": "EQUIPE F"}
 
     def run(self, params: dict, log) -> Resultado:
-        from scripts_originais.checklist_equipe import gerar_relatorio_checklist
+        from .sgp_auth import login_requests
+
+        mod = carregar_script("conferencia-os/checklist_equipe.py")
+        mod.login_sgp = login_requests  # SGP exige 2FA no login web
 
         equipe = (params.get("equipe") or "EQUIPE F").strip().upper()
         log(f"Analisando checklists da {equipe}…")
 
         with redirect_stdout(LogWriter(log)):
-            dados = gerar_relatorio_checklist(equipe)
+            dados = mod.gerar_relatorio_checklist(equipe)
 
         contagem = {"ok": 0, "atencao": 0, "problema": 0, "erro": 0}
         for d in dados:

@@ -1,14 +1,10 @@
-"""Adapter: Termos Agendados (scripts_originais/termos_agendados.py).
+"""Adapter: Termos Agendados (scripts_originais/relatorios/termos_agendados.py).
 
-Chama a função existente in-process (com a mesma cola do main() do script)
-e usa o texto RETORNADO como relatório — os prints de debug viram logs."""
-from contextlib import redirect_stdout
-from datetime import timedelta
-
-import requests
-
+O script novo usa a API oficial do SGP (URA /ordemservico/list/) — sem login web
+e sem 2FA — e já imprime o relatório pronto. Rodamos como subprocesso e usamos a
+saída como relatório (os prints de progresso viram logs ao vivo)."""
 from .base import Arquivo, BaseAutomacao, Resultado
-from .runner import LogWriter
+from .runner import run_script_stream
 
 
 class TermosAgendados(BaseAutomacao):
@@ -19,15 +15,8 @@ class TermosAgendados(BaseAutomacao):
     parametros = {}
 
     def run(self, params: dict, log) -> Resultado:
-        from scripts_originais import termos_agendados as T
-
-        log("Conectando ao SGP e verificando instalações de amanhã…")
-        session = requests.Session()
-        with redirect_stdout(LogWriter(log)):
-            T.login_sgp(session)
-            amanha = T.datetime.now(T.TZ_BR).replace(tzinfo=None) + timedelta(days=1)
-            texto = T.gerar_relatorio_instalacoes_agendadas(session, amanha)
-
+        log("Consultando o SGP e verificando as instalações de amanhã…")
+        texto = run_script_stream("relatorios/termos_agendados.py", log, timeout=180)
         log("Verificação concluída ✓")
         arquivos = [
             Arquivo("termos-agendados.txt", texto.encode("utf-8"), "text/plain; charset=utf-8")

@@ -4,4 +4,5 @@ beautifulsoup4>=4.12.0
 python-dotenv>=1.0.0
 tzdata>=2024.1  # zoneinfo America/Sao_Paulo no Windows/VPS sem tz database
 openpyxl>=3.1.0  # relatório de linhas canceladas (Excel)
-playwright>=1.45.0  # Vendas (FocusChat) e Remover Linhas (navegador)
+playwright>=1.45.0  # Remover Linhas (navegador) e login web 2FA de comum/sgp_login
+pyotp>=2.9.0  # 2FA (TOTP) do SGP em comum/sgp_login.py
