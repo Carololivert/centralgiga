@@ -40,8 +40,8 @@ function hojeISO() {
 watchEffect(() => {
   for (const c of campos.value) {
     if (c.key in paramsModel) continue
-    // campo de data começa preenchido com hoje (a não ser que o schema traga default)
-    paramsModel[c.key] = c.default ?? (c.type === 'date' ? hojeISO() : '')
+    // campo de data começa preenchido com hoje (default vazio conta como "sem default")
+    paramsModel[c.key] = c.type === 'date' ? (c.default || hojeISO()) : (c.default ?? '')
   }
 })
 
@@ -175,7 +175,14 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
               description="Por segurança vem marcado como simulação (não remove nada). Só desmarque 'Apenas simular' quando tiver certeza."
             />
 
-            <div v-if="campos.length" class="grid gap-4 sm:grid-cols-2">
+            <!-- Verificar Vendas: seletor de data dedicado (atalhos Hoje/Ontem/Todas + calendário) -->
+            <VendasSeletorData
+              v-if="slug === 'verificar-vendas'"
+              v-model:data="paramsModel.data"
+              v-model:todas="paramsModel.todas"
+            />
+
+            <div v-else-if="campos.length" class="grid gap-4 sm:grid-cols-2">
               <template v-for="c in campos" :key="c.key">
                 <div v-if="c.type === 'boolean'" class="flex items-center gap-3 sm:col-span-2">
                   <USwitch v-model="paramsModel[c.key]" />
