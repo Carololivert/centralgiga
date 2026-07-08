@@ -28,11 +28,16 @@ export default defineEventHandler(async (event) => {
   })
   if (error) throw createError({ statusCode: 400, statusMessage: error.message })
 
-  // o trigger já cria o profile; reforça nome/cargo/ativo + marca senha provisória
-  await admin
+  // o trigger cria o profile INATIVO (fail-closed); aqui o admin o ativa e
+  // define nome/cargo + marca senha provisória. Se falhar, o usuário fica
+  // inerte (active=false) — então avisamos o admin em vez de retornar ok.
+  const { error: upErr } = await admin
     .from('profiles')
     .update({ full_name, role, active: true, must_change_password: true })
     .eq('id', data.user.id)
+  if (upErr) {
+    throw createError({ statusCode: 500, statusMessage: 'Usuário criado, mas falha ao ativar o perfil. Ative/edite manualmente na lista.' })
+  }
 
   await admin.rpc('registrar_auditoria', { p_action: 'usuario-criado', p_detail: { email, role }, p_user_id: me.id })
 
