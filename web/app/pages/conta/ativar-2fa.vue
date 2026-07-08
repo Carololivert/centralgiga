@@ -37,7 +37,11 @@ async function iniciar() {
       return
     }
     await limparNaoVerificados()
-    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
+    // `issuer` é o nome exibido no app autenticador (senão vira o host, ex. localhost:3000)
+    const { data, error } = await supabase.auth.mfa.enroll({
+      factorType: 'totp',
+      issuer: 'Giga Automações',
+    })
     if (error || !data) throw error || new Error('Falha ao gerar o QR Code.')
     factorId.value = data.id
     qr.value = data.totp.qr_code
