@@ -1,35 +1,40 @@
-import { serverSupabaseClient, serverSupabaseServiceRole } from '#supabase/server'
+import { serverSupabaseServiceRole } from '#supabase/server'
 
 const ROLES = ['admin', 'supervisor', 'atendente']
 
-// Cria um usuário (auth + profile). Admin only. service_role server-side.
+// Cria um usuário (auth + profile) com SENHA PROVISÓRIA gerada pelo sistema.
+// Admin only. A senha é devolvida uma única vez para o admin repassar; no
+// primeiro acesso o usuário é obrigado a definir a própria senha.
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  const me = await requireAdmin(event)
   const body = await readBody(event) || {}
 
   const email = String(body.email || '').trim().toLowerCase()
-  const password = String(body.password || '')
   const full_name = String(body.full_name || '').trim()
   const role = ROLES.includes(body.role) ? body.role : 'atendente'
 
-  if (!email || password.length < 6) {
-    throw createError({ statusCode: 400, statusMessage: 'E-mail e senha (mín. 6 caracteres) são obrigatórios.' })
+  if (!email || !email.includes('@')) {
+    throw createError({ statusCode: 400, statusMessage: 'Informe um e-mail válido.' })
   }
+
+  const senhaProvisoria = gerarSenhaProvisoria()
 
   const admin = serverSupabaseServiceRole(event)
   const { data, error } = await admin.auth.admin.createUser({
     email,
-    password,
+    password: senhaProvisoria,
     email_confirm: true, // já entra sem precisar confirmar e-mail
     user_metadata: { full_name, role },
   })
   if (error) throw createError({ statusCode: 400, statusMessage: error.message })
 
-  // o trigger já cria o profile; reforça nome/cargo/ativo
-  await admin.from('profiles').update({ full_name, role, active: true }).eq('id', data.user.id)
+  // o trigger já cria o profile; reforça nome/cargo/ativo + marca senha provisória
+  await admin
+    .from('profiles')
+    .update({ full_name, role, active: true, must_change_password: true })
+    .eq('id', data.user.id)
 
-  const session = await serverSupabaseClient(event)
-  await session.rpc('registrar_auditoria', { p_action: 'usuario-criado', p_detail: { email, role } })
+  await admin.rpc('registrar_auditoria', { p_action: 'usuario-criado', p_detail: { email, role }, p_user_id: me.id })
 
-  return { ok: true, id: data.user.id }
+  return { ok: true, id: data.user.id, senha_provisoria: senhaProvisoria }
 })

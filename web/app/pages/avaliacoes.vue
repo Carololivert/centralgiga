@@ -70,12 +70,11 @@ async function aprovar(r: GiganetReview) {
 async function rejeitar(r: GiganetReview) {
   busyId.value = r.id
   try {
-    await client.from('giganet_reviews')
-      .update({ status: 'rejected', final_response: null, decided_at: new Date().toISOString() })
-      .eq('id', r.id)
-    await client.rpc('registrar_auditoria', { p_action: 'avaliacao-rejeitada', p_detail: { id: r.id } })
+    await $fetch(`/api/avaliacoes/${r.id}/rejeitar`, { method: 'POST' })
     toast.add({ title: 'Rejeitada', color: 'neutral' })
     await refresh()
+  } catch (e: any) {
+    toast.add({ title: 'Falha ao rejeitar', description: e?.data?.statusMessage || e?.message, color: 'error' })
   } finally {
     busyId.value = null
   }

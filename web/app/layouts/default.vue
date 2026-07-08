@@ -75,6 +75,10 @@ async function sair() {
 const userMenu = computed<DropdownMenuItem[][]>(() => [
   [{ label: perfil.value?.full_name || 'Conta', type: 'label' as const }],
   [{
+    label: 'Segurança',
+    icon: 'i-lucide-shield-check',
+    onSelect: () => { navigateTo('/conta/seguranca') },
+  }, {
     label: colorMode.value === 'dark' ? 'Tema claro' : 'Tema escuro',
     icon: colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon',
     onSelect: () => { colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark' },

@@ -1,10 +1,11 @@
-import { serverSupabaseClient } from '#supabase/server'
+import { serverSupabaseClient, serverSupabaseServiceRole } from '#supabase/server'
 import type { GiganetReview } from '~/types/db'
 
 // Aprova: publica no Google via n8n (N8N_PUBLICAR_URL) e, se der certo,
-// marca approved. Usa a sessão do admin (RLS) — sem service_role.
+// marca approved. Leitura/escrita da avaliação via sessão do admin (RLS);
+// auditoria via service_role (registrar_auditoria é service_role-only).
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  const me = await requireAdmin(event)
   const id = getRouterParam(event, 'id')
   const cfg = useRuntimeConfig()
   const body = await readBody(event) || {}
@@ -41,9 +42,11 @@ export default defineEventHandler(async (event) => {
     .eq('id', id)
   if (error) throw createError({ statusCode: 500, statusMessage: error.message })
 
-  await client.rpc('registrar_auditoria', {
+  const admin = serverSupabaseServiceRole(event)
+  await admin.rpc('registrar_auditoria', {
     p_action: 'avaliacao-aprovada',
     p_detail: { id, review_id: review.review_id },
+    p_user_id: me.id,
   })
 
   return { ok: true }

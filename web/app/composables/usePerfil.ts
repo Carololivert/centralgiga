@@ -18,7 +18,7 @@ export function usePerfil() {
 
     const { data, error } = await client
       .from('profiles')
-      .select('id, full_name, role, active')
+      .select('id, full_name, role, active, must_change_password')
       .eq('id', user.value.id)
       .single()
 

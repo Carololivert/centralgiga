@@ -6,6 +6,7 @@ export interface Perfil {
   full_name: string | null
   role: Role
   active: boolean
+  must_change_password: boolean
 }
 
 export interface Sistema {

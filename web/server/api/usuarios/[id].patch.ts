@@ -1,10 +1,10 @@
-import { serverSupabaseClient, serverSupabaseServiceRole } from '#supabase/server'
+import { serverSupabaseServiceRole } from '#supabase/server'
 
 const ROLES = ['admin', 'supervisor', 'atendente']
 
 // Edita cargo / ativo / nome de um usuário. Admin only.
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  const me = await requireAdmin(event)
   const id = getRouterParam(event, 'id')
   const body = await readBody(event) || {}
 
@@ -21,8 +21,7 @@ export default defineEventHandler(async (event) => {
   const { error } = await admin.from('profiles').update(patch).eq('id', id)
   if (error) throw createError({ statusCode: 500, statusMessage: error.message })
 
-  const session = await serverSupabaseClient(event)
-  await session.rpc('registrar_auditoria', { p_action: 'usuario-editado', p_detail: { id, ...patch } })
+  await admin.rpc('registrar_auditoria', { p_action: 'usuario-editado', p_detail: { id, ...patch }, p_user_id: me.id })
 
   return { ok: true }
 })
