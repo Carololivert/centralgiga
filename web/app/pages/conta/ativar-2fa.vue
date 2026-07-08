@@ -8,6 +8,8 @@ const { carregar } = usePerfil()
 const carregando = ref(true)
 const salvando = ref(false)
 const erro = ref('')
+const debug = ref('')
+const precisaRelogar = ref(false)
 
 const qr = ref('')
 const secret = ref('')
@@ -44,10 +46,48 @@ async function limparNaoVerificados() {
   }
 }
 
+// Diagnóstico: a sessão está presente? o token tem o 'sub' (id do usuário)?
+async function montarDebug() {
+  try {
+    const { data: s } = await supabase.auth.getSession()
+    const tk = s.session?.access_token
+    let sub = 'sem-token'
+    if (tk) {
+      try { sub = JSON.parse(atob(tk.split('.')[1]!)).sub ? 'ok' : 'AUSENTE' } catch { sub = 'erro-decode' }
+    }
+    debug.value = `sessão=${s.session ? 'sim' : 'não'} · sub=${sub}`
+  } catch {
+    debug.value = ''
+  }
+}
+
+async function relogar() {
+  await supabase.auth.signOut()
+  await navigateTo('/login', { replace: true })
+}
+
+const acoesErro = computed(() =>
+  precisaRelogar.value
+    ? [{ label: 'Fazer login de novo', color: 'neutral' as const, variant: 'soft' as const, onClick: relogar }]
+    : [{ label: 'Tentar de novo', color: 'neutral' as const, variant: 'soft' as const, onClick: iniciar }],
+)
+
 async function iniciar() {
   carregando.value = true
   erro.value = ''
+  debug.value = ''
+  precisaRelogar.value = false
   try {
+    // Garante uma sessão de usuário VÁLIDA (com 'sub') antes de falar com o MFA.
+    // Isso conserta o caso de token velho/não hidratado logo após o login/troca de senha.
+    const { data: u, error: uErr } = await supabase.auth.getUser()
+    if (uErr || !u?.user) {
+      erro.value = 'Sua sessão expirou ou está inválida. Faça login novamente para cadastrar o 2FA.'
+      precisaRelogar.value = true
+      await montarDebug()
+      return
+    }
+
     // já tem 2FA? então não precisa cadastrar de novo.
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     if (aal?.nextLevel === 'aal2') {
@@ -66,6 +106,8 @@ async function iniciar() {
     secret.value = data.totp.secret
   } catch (e: any) {
     erro.value = e?.message || 'Erro ao iniciar o 2FA.'
+    if (/sub claim/i.test(erro.value)) precisaRelogar.value = true
+    await montarDebug()
   } finally {
     carregando.value = false
   }
@@ -116,15 +158,17 @@ async function confirmar() {
       <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin" />
     </div>
 
-    <UAlert
-      v-else-if="erro"
-      color="error"
-      variant="soft"
-      icon="i-lucide-triangle-alert"
-      title="Não foi possível iniciar o 2FA"
-      :description="erro"
-      :actions="[{ label: 'Tentar de novo', color: 'neutral', variant: 'soft', onClick: iniciar }]"
-    />
+    <div v-else-if="erro">
+      <UAlert
+        color="error"
+        variant="soft"
+        icon="i-lucide-triangle-alert"
+        title="Não foi possível iniciar o 2FA"
+        :description="erro"
+        :actions="acoesErro"
+      />
+      <p v-if="debug" class="mt-3 text-center text-xs text-muted">{{ debug }}</p>
+    </div>
 
     <div v-else class="space-y-5">
       <div class="mx-auto w-56 max-w-full rounded-2xl border border-default bg-white p-4">

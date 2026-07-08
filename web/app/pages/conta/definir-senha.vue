@@ -2,6 +2,8 @@
 definePageMeta({ layout: 'auth' })
 
 const toast = useToast()
+const supabase = useSupabaseClient()
+const user = useSupabaseUser()
 const { carregar } = usePerfil()
 
 const senha = ref('')
@@ -18,6 +20,12 @@ async function salvar() {
   salvando.value = true
   try {
     await $fetch('/api/conta/senha', { method: 'POST', body: { senha: senha.value } })
+    // Reautentica com a senha nova para garantir uma sessão fresca (com 'sub')
+    // antes do cadastro de 2FA — evita o erro "missing sub claim".
+    const email = user.value?.email
+    if (email) {
+      await supabase.auth.signInWithPassword({ email, password: senha.value }).catch(() => {})
+    }
     await carregar(true)
     toast.add({ title: 'Senha definida ✓', color: 'success', icon: 'i-lucide-check' })
     // o porteiro leva para o cadastro de 2FA (ou início)
