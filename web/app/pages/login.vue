@@ -6,7 +6,26 @@ definePageMeta({ layout: 'auth' })
 const supabase = useSupabaseClient()
 const user = useSupabaseUser()
 const toast = useToast()
+const route = useRoute()
 const { carregar } = usePerfil()
+
+// watch (não onMounted): o logout por inatividade navega para /login?motivo=…
+// com o componente já montado — a query muda sem remontar, então o toast
+// precisa reagir à query, não ao mount.
+watch(
+  () => route.query.motivo,
+  (m) => {
+    if (m === 'inatividade') {
+      toast.add({
+        title: 'Sessão encerrada',
+        description: 'Você ficou mais de 1 hora sem atividade e foi desconectado por segurança.',
+        color: 'warning',
+        icon: 'i-lucide-clock',
+      })
+    }
+  },
+  { immediate: true },
+)
 
 const etapa = ref<'senha' | 'mfa'>('senha')
 const state = reactive({ email: '', senha: '' })
@@ -30,6 +49,17 @@ watchEffect(async () => {
   if (user.value && etapa.value === 'senha' && !carregando.value) {
     const ok = await rotear()
     if (ok) navigateTo('/', { replace: true })
+  }
+})
+
+// Se a sessão cair (ex.: logout por inatividade parado na etapa do 2FA),
+// volta o formulário para a etapa de senha em vez de deixar um desafio inválido.
+watch(user, (u) => {
+  if (!u) {
+    etapa.value = 'senha'
+    desafio.value = null
+    codigo.value = ''
+    carregando.value = false
   }
 })
 
