@@ -14,8 +14,26 @@ const secret = ref('')
 const factorId = ref('')
 const codigo = ref('')
 
-// o qr_code pode vir como data-URI (<img>) ou como SVG cru (v-html)
-const qrEhImagem = computed(() => qr.value.startsWith('data:'))
+// O Supabase devolve o QR como SVG — às vezes cru, às vezes num data-URI
+// (data:image/svg+xml;utf-8,<svg…> ou ;base64,…). Renderizar isso num <img>
+// costuma sair pequeno/torto; então extraímos o markup do SVG e embutimos
+// inline, forçando-o a preencher a caixa. Fallback p/ <img> se não for SVG.
+const qrSvg = computed(() => {
+  const q = qr.value?.trim()
+  if (!q) return ''
+  if (q.startsWith('<svg') || q.startsWith('<?xml')) return q
+  const m = q.match(/^data:image\/svg\+xml(;[^,]*)?,(.*)$/is)
+  if (m) {
+    const meta = (m[1] || '').toLowerCase()
+    const payload = m[2] ?? ''
+    if (meta.includes('base64')) {
+      try { return atob(payload) } catch { return '' }
+    }
+    if (payload.trimStart().startsWith('<')) return payload // já é SVG literal
+    try { return decodeURIComponent(payload) } catch { return payload }
+  }
+  return ''
+})
 
 async function limparNaoVerificados() {
   const { data } = await supabase.auth.mfa.listFactors()
@@ -109,11 +127,13 @@ async function confirmar() {
     />
 
     <div v-else class="space-y-5">
-      <div class="flex justify-center">
-        <div class="rounded-xl border border-default bg-white p-3">
-          <img v-if="qrEhImagem" :src="qr" alt="QR Code do 2FA" width="180" height="180">
-          <div v-else class="[&_svg]:size-[180px]" v-html="qr" />
-        </div>
+      <div class="mx-auto w-56 max-w-full rounded-2xl border border-default bg-white p-4">
+        <div
+          v-if="qrSvg"
+          class="w-full aspect-square [&>svg]:!w-full [&>svg]:!h-full [&>svg]:block"
+          v-html="qrSvg"
+        />
+        <img v-else :src="qr" alt="QR Code do 2FA" class="block w-full aspect-square">
       </div>
 
       <div class="text-center text-sm text-muted">
