@@ -3,9 +3,13 @@ import type { H3Event } from 'h3'
 
 /**
  * Garante que o chamador está logado e é admin (usa a sessão, sem service_role).
- * Também exige 2FA concluído (AAL2) para ações administrativas — defesa em
- * profundidade: mesmo que alguém pule a tela de 2FA, os endpoints de admin
- * recusam enquanto a sessão não estiver elevada.
+ *
+ * NÃO exige AAL2 aqui: o token que chega ao servidor vem do COOKIE e nem sempre
+ * está elevado a aal2 (mesmo para um admin que fez o 2FA no login) — exigir aal2
+ * no servidor derrubava as telas de admin (Usuários/Auditoria/Avaliações) com
+ * 403 mesmo com o 2FA concluído. A obrigatoriedade de 2FA é imposta no porteiro
+ * do app (middleware seguranca.global.ts, que barra quem não tem 2FA antes de
+ * qualquer página) e na RLS de jobs_insert (rodar automação exige aal2).
  */
 export async function requireAdmin(event: H3Event) {
   const user = await serverSupabaseUser(event).catch(() => null)
@@ -13,16 +17,6 @@ export async function requireAdmin(event: H3Event) {
     throw createError({ statusCode: 401, statusMessage: 'Não autenticado' })
   }
   const client = await serverSupabaseClient(event)
-
-  // Exige AAL2 quando conseguimos determinar o nível. Se não der (sessão
-  // indisponível no servidor), não bloqueia — a trava principal é o login.
-  const { data: aal } = await client.auth.mfa.getAuthenticatorAssuranceLevel()
-  if (aal?.currentLevel === 'aal1') {
-    throw createError({
-      statusCode: 403,
-      statusMessage: 'Confirme o 2FA para executar ações administrativas.',
-    })
-  }
 
   const { data } = await client
     .from('profiles')
