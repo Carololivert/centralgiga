@@ -57,6 +57,14 @@ const emAndamento = computed(
 const concluido = computed(() => jobAtual.value?.status === 'concluido')
 const logsTexto = computed(() => logs.value.map(l => l.line).join('\n'))
 
+// ── Cronômetro ao vivo: tempo correndo enquanto executa + duração final ──
+const agora = ref(Date.now())
+let ticker: any = null
+const tempoDecorrido = computed(() =>
+  emAndamento.value ? decorridoJobMs(jobAtual.value, agora.value) : null,
+)
+const duracaoFinal = computed(() => duracaoJobMs(jobAtual.value))
+
 const statusInfo: Record<string, { label: string, color: any, icon: string }> = {
   na_fila: { label: 'Na fila', color: 'neutral', icon: 'i-lucide-clock' },
   executando: { label: 'Processando', color: 'info', icon: 'i-lucide-loader-circle' },
@@ -145,7 +153,11 @@ function fmtData(iso: string) {
   return new Date(iso).toLocaleString('pt-BR')
 }
 
-onUnmounted(() => { if (canal) client.removeChannel(canal) })
+onMounted(() => { ticker = setInterval(() => { agora.value = Date.now() }, 1000) })
+onUnmounted(() => {
+  if (canal) client.removeChannel(canal)
+  if (ticker) clearInterval(ticker)
+})
 </script>
 
 <template>
@@ -213,12 +225,27 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
         <UCard v-if="jobAtual">
           <template #header>
             <div class="flex items-center justify-between gap-2 flex-wrap">
-              <UBadge
-                :color="statusInfo[jobAtual.status].color"
-                variant="subtle"
-                :icon="statusInfo[jobAtual.status].icon"
-                :label="statusInfo[jobAtual.status].label"
-              />
+              <div class="flex items-center gap-2">
+                <UBadge
+                  :color="statusInfo[jobAtual.status].color"
+                  variant="subtle"
+                  :icon="statusInfo[jobAtual.status].icon"
+                  :label="statusInfo[jobAtual.status].label"
+                />
+                <!-- marcador de tempo: correndo enquanto executa, total ao concluir -->
+                <span
+                  v-if="emAndamento"
+                  class="inline-flex items-center gap-1 text-sm text-muted tabular-nums"
+                >
+                  <UIcon name="i-lucide-timer" class="size-4" />{{ cronometro(tempoDecorrido) }}
+                </span>
+                <span
+                  v-else-if="concluido && duracaoFinal != null"
+                  class="inline-flex items-center gap-1 text-sm text-muted"
+                >
+                  <UIcon name="i-lucide-timer" class="size-4" />em {{ formatarDuracao(duracaoFinal) }}
+                </span>
+              </div>
               <div v-if="concluido" class="flex items-center gap-2">
                 <UButton
                   v-if="!ehChecklist"
@@ -250,6 +277,9 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
             <UIcon name="i-lucide-loader-circle" class="size-10 mx-auto text-primary animate-spin mb-3" />
             <p class="font-medium">
               {{ jobAtual.status === 'na_fila' ? 'Na fila, começando já já…' : 'Processando, aguarde…' }}
+            </p>
+            <p class="mt-2 text-2xl font-semibold text-primary tabular-nums flex items-center justify-center gap-1.5">
+              <UIcon name="i-lucide-timer" class="size-5" />{{ cronometro(tempoDecorrido) }}
             </p>
             <p class="text-sm text-muted mt-1">Isso pode levar de alguns segundos a uns minutos.</p>
           </div>
@@ -292,6 +322,12 @@ onUnmounted(() => { if (canal) client.removeChannel(canal) })
                   :label="statusInfo[j.status].label"
                 />
                 <span class="text-xs sm:text-sm text-muted">{{ fmtData(j.created_at) }}</span>
+                <span
+                  v-if="j.status === 'concluido' && duracaoJobMs(j) != null"
+                  class="inline-flex items-center gap-1 text-xs text-muted tabular-nums"
+                >
+                  <UIcon name="i-lucide-timer" class="size-3.5" />{{ formatarDuracao(duracaoJobMs(j)) }}
+                </span>
                 <span class="ml-auto" />
                 <UButton
                   v-if="j.status === 'concluido' && j.result_preview"

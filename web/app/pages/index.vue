@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Sistema } from '~/types/db'
+import type { Job, Sistema } from '~/types/db'
 
 definePageMeta({ middleware: 'role' })
 
@@ -13,6 +13,69 @@ const { data: sistemas } = await useAsyncData('systems', async () => {
     .eq('active', true)
     .order('sort_order')
   return (data ?? []) as Sistema[]
+})
+
+// ── Marcador de execução por automação (última execução + tempo ao vivo) ──
+// Carrega os jobs recentes e reduz ao ÚLTIMO de cada sistema; o realtime
+// mantém o marcador atualizado enquanto uma automação roda.
+const { data: jobsRecentes } = await useAsyncData('dashboard-jobs', async () => {
+  const { data } = await client
+    .from('jobs')
+    .select('id, system_slug, status, created_at, started_at, finished_at')
+    .order('created_at', { ascending: false })
+    .limit(100)
+  return (data ?? []) as Job[]
+})
+
+const jobPorSistema = ref<Record<string, Job>>({})
+function reconstruirMapa() {
+  const mapa: Record<string, Job> = {}
+  for (const j of jobsRecentes.value ?? []) {
+    if (!mapa[j.system_slug]) mapa[j.system_slug] = j // já vem ordenado desc → o 1º é o mais recente
+  }
+  jobPorSistema.value = mapa
+}
+reconstruirMapa()
+
+const agora = ref(Date.now())
+let ticker: any = null
+let canal: any = null
+onMounted(() => {
+  ticker = setInterval(() => { agora.value = Date.now() }, 1000)
+  canal = client
+    .channel('dashboard-jobs')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, (payload: any) => {
+      const j = payload.new as Job
+      if (!j?.system_slug) return
+      const atual = jobPorSistema.value[j.system_slug]
+      if (!atual || new Date(j.created_at).getTime() >= new Date(atual.created_at).getTime()) {
+        jobPorSistema.value = { ...jobPorSistema.value, [j.system_slug]: j }
+      }
+    })
+    .subscribe()
+})
+onUnmounted(() => {
+  if (ticker) clearInterval(ticker)
+  if (canal) client.removeChannel(canal)
+})
+
+type Marca = { tipo: 'rodando' | 'ok' | 'erro', texto: string }
+const marcadores = computed<Record<string, Marca | null>>(() => {
+  const out: Record<string, Marca | null> = {}
+  for (const s of sistemas.value ?? []) {
+    const j = jobPorSistema.value[s.slug]
+    if (!j) { out[s.slug] = null; continue }
+    if (j.status === 'na_fila' || j.status === 'executando') {
+      out[s.slug] = { tipo: 'rodando', texto: cronometro(decorridoJobMs(j, agora.value)) }
+    }
+    else if (j.status === 'concluido') {
+      out[s.slug] = { tipo: 'ok', texto: formatarDuracao(duracaoJobMs(j)) }
+    }
+    else {
+      out[s.slug] = { tipo: 'erro', texto: 'falhou' }
+    }
+  }
+  return out
 })
 
 const roleLabel: Record<string, string> = {
@@ -72,7 +135,7 @@ function abrir(s: Sistema) {
               <span class="inline-grid place-items-center size-11 rounded-xl bg-primary/10 text-primary shrink-0">
                 <UIcon :name="iconePorSlug[s.slug] || 'i-lucide-cpu'" class="size-5.5" />
               </span>
-              <div class="min-w-0">
+              <div class="min-w-0 grow">
                 <h3 class="font-semibold truncate">{{ s.name }}</h3>
                 <div class="flex flex-wrap gap-1 mt-1">
                   <UBadge
@@ -91,6 +154,31 @@ function abrir(s: Sistema) {
                     label="aprovação"
                   />
                 </div>
+              </div>
+
+              <!-- marcador de execução: rodando (tempo ao vivo) / última duração / falhou -->
+              <div v-if="marcadores[s.slug]" class="shrink-0" @click.stop>
+                <span
+                  v-if="marcadores[s.slug]!.tipo === 'rodando'"
+                  class="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium tabular-nums"
+                  title="Executando agora"
+                >
+                  <UIcon name="i-lucide-loader-circle" class="size-3.5 animate-spin" />{{ marcadores[s.slug]!.texto }}
+                </span>
+                <span
+                  v-else-if="marcadores[s.slug]!.tipo === 'ok'"
+                  class="inline-flex items-center gap-1 rounded-full bg-elevated text-muted px-2 py-0.5 text-xs tabular-nums"
+                  title="Tempo da última execução"
+                >
+                  <UIcon name="i-lucide-timer" class="size-3.5" />{{ marcadores[s.slug]!.texto || 'ok' }}
+                </span>
+                <span
+                  v-else
+                  class="inline-flex items-center gap-1 rounded-full bg-error/10 text-error px-2 py-0.5 text-xs"
+                  title="Última execução falhou"
+                >
+                  <UIcon name="i-lucide-circle-x" class="size-3.5" />falhou
+                </span>
               </div>
             </div>
 
