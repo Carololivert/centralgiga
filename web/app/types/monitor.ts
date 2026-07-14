@@ -109,6 +109,15 @@ export interface GrupoQueda {
   clientes: Cliente[]
 }
 
+export interface RelatorioPon {
+  kind: string
+  los: number
+  power: number
+  offline: number
+  total: number
+  percent: number
+}
+
 export interface PonResp {
   ok: boolean
   total_pon: number
@@ -119,6 +128,11 @@ export interface PonResp {
   grupos: GrupoQueda[]
   sem_hora: Cliente[]
   clientes: Cliente[]
+  // Reconciliação com o relatório de outage (fonte firme) — evita all-clear falso
+  // quando o status ao vivo (get_onus_statuses) vem vazio/None.
+  relatorio?: RelatorioPon | null
+  report_down?: number
+  ao_vivo_incompleto?: boolean
   demo?: boolean
   erro?: string
 }

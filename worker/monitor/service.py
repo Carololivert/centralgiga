@@ -218,6 +218,31 @@ def _agrupar_quedas(clientes, janela):
     return grupos, sem_hora
 
 
+def _pon_report(olt, board, port):
+    """Contagem do relatório de outage (get_outage_pons = fonte FIRME) para a PON
+    olt/board/port. Serve para NÃO dar all-clear falso quando o status ao vivo
+    (get_onus_statuses) vier vazio/None. Reaproveita o cache do snapshot (mesma
+    chave 'outage-{olt}'), então normalmente não custa uma chamada extra."""
+    try:
+        o = _cached(f"outage-{olt}", lambda: sol.pons_em_outage(olt))
+    except Exception:
+        return None
+    secs = {s.get("key"): s for s in (o.get("sections") or [])}
+    for k in ("partial_los", "los"):
+        for g in (secs.get(k, {}).get("groups") or []):
+            for p in (g.get("pons") or []):
+                if str(p.get("board")) == str(board) and str(p.get("port")) == str(port):
+                    return {
+                        "kind": k,
+                        "los": int(p.get("los_count") or 0),
+                        "power": int(p.get("power_count") or 0),
+                        "offline": int(p.get("offline_count") or 0),
+                        "total": int(p.get("total_onus") or 0),
+                        "percent": p.get("affected_percent") or 0,
+                    }
+    return None
+
+
 def criar_app() -> Flask:
     app = Flask(__name__)
 
@@ -270,10 +295,20 @@ def criar_app() -> Flask:
                               if c.get("contrato_status") == "Ativo"
                               and c.get("onu_status") in _DOWN)
             grupos, sem_hora = _agrupar_quedas(clientes, janela)
+            # Reconcilia com o relatório de outage (fonte firme). O status ao vivo
+            # (get_onus_statuses) é instável: a SmartOLT devolve status=None para
+            # ONUs que não poluou há pouco -> down pode vir 0 mesmo com a PON caída.
+            rel = _pon_report(olt, board, port)
+            report_down = (rel["los"] + rel["power"] + rel["offline"]) if rel else 0
+            # Se o relatório aponta quedas mas o ao vivo não reflete, sinaliza que
+            # o ao vivo está incompleto (o front não afirma "sem quedas" nesse caso).
+            ao_vivo_incompleto = bool(rel and report_down > down)
             return jsonify({"ok": True, "total_pon": len(roster), "down": down,
                             "ativos_down": ativos_down, "capped": len(roster) > _CAP,
                             "janela": janela, "grupos": grupos, "sem_hora": sem_hora,
-                            "clientes": clientes})
+                            "clientes": clientes,
+                            "relatorio": rel, "report_down": report_down,
+                            "ao_vivo_incompleto": ao_vivo_incompleto})
         except Exception as e:
             return jsonify({"ok": False, "erro": str(e)}), 500
 

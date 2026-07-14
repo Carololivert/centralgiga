@@ -129,6 +129,20 @@ def pon(olt, board, port, janela):
     """Drill-down de demonstração da PON (olt/board/port) cruzada com o SGP."""
     is_rompida = (str(olt), str(board), str(port)) == ("3", "2", "5")
 
+    # Cenário "status ao vivo indisponível" (demonstra o fallback do relatório):
+    # VILA BURITIS (OLT 1 · b3/p7) do snapshot demo — o get_onus_statuses viria
+    # todo None, então o modal cai para as contagens do relatório de outage.
+    if (str(olt), str(board), str(port)) == ("1", "3", "7"):
+        return {
+            "ok": True, "demo": True,
+            "total_pon": 128, "down": 0, "ativos_down": 0,
+            "capped": False, "janela": janela,
+            "grupos": [], "sem_hora": [], "clientes": [],
+            "relatorio": {"kind": "partial_los", "los": 18, "power": 0,
+                          "offline": 0, "total": 128, "percent": 14},
+            "report_down": 18, "ao_vivo_incompleto": True,
+        }
+
     if is_rompida:
         clientes = list(_CLIENTES_LOS)
         sem_hora = list(_SEM_HORA)
@@ -158,4 +172,7 @@ def pon(olt, board, port, janela):
         "grupos": [grupo],
         "sem_hora": sem_hora,
         "clientes": clientes + sem_hora,
+        "relatorio": {"kind": "los", "los": down, "power": 0, "offline": 0,
+                      "total": total_pon, "percent": 100 if is_rompida else 33},
+        "report_down": down, "ao_vivo_incompleto": False,
     }

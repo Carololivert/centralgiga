@@ -9,6 +9,14 @@ function rowAccent(kind: string) {
     ? 'shadow-[inset_3px_0_0_var(--ui-error)]'
     : 'shadow-[inset_3px_0_0_var(--ui-warning)]'
 }
+
+// "Afetadas" = LOS (rompimento de fibra). A barra e o % derivam de los/total_onus,
+// então número, barra e % ficam consistentes entre si (o affected_percent da
+// SmartOLT usa outra base e não batia com a contagem). power/offline ficam na
+// coluna "Motivo".
+function losPct(e: EventoFibra): number {
+  return e.total_onus ? Math.round((e.los / e.total_onus) * 100) : 0
+}
 </script>
 
 <template>
@@ -29,7 +37,7 @@ function rowAccent(kind: string) {
             PON
           </th>
           <th class="py-2 px-3 font-medium">
-            Afetadas
+            Afetadas (LOS)
           </th>
           <th class="py-2 px-3 font-medium">
             Motivo
@@ -77,11 +85,11 @@ function rowAccent(kind: string) {
           </td>
           <td class="py-2.5 px-3 whitespace-nowrap">
             <div class="flex items-center gap-2">
-              <span class="tabular-nums">{{ e.los + e.power + e.offline }}/{{ e.total_onus }}</span>
+              <span class="tabular-nums"><b class="text-error">{{ e.los }}</b>/{{ e.total_onus }}</span>
               <span class="inline-block h-1.5 w-16 rounded-full bg-muted overflow-hidden">
-                <span class="block h-full rounded-full bg-error" :style="{ width: barWidth(e.percent) + '%' }" />
+                <span class="block h-full rounded-full bg-error" :style="{ width: barWidth(losPct(e)) + '%' }" />
               </span>
-              <span class="text-xs text-muted tabular-nums">{{ e.percent }}%</span>
+              <span class="text-xs text-muted tabular-nums">{{ losPct(e) }}%</span>
             </div>
           </td>
           <td class="py-2.5 px-3 whitespace-nowrap text-xs text-muted tabular-nums">
