@@ -28,3 +28,27 @@ export async function requireAdmin(event: H3Event) {
   }
   return user
 }
+
+/**
+ * Garante que o chamador está logado, ativo e tem um dos cargos indicados
+ * (passe 'admin' explicitamente quando ele também deve ter acesso). Usa a
+ * sessão do cookie, sem service_role — mesma abordagem do requireAdmin.
+ */
+export async function requireRole(event: H3Event, roles: string[]) {
+  const user = await serverSupabaseUser(event).catch(() => null)
+  if (!user) {
+    throw createError({ statusCode: 401, statusMessage: 'Não autenticado' })
+  }
+  const client = await serverSupabaseClient(event)
+
+  const { data } = await client
+    .from('profiles')
+    .select('role, active')
+    .eq('id', user.id)
+    .single()
+  const role = (data as any)?.role
+  if (!data || (data as any).active === false || !roles.includes(role)) {
+    throw createError({ statusCode: 403, statusMessage: 'Sem permissão' })
+  }
+  return user
+}

@@ -31,6 +31,13 @@ export default defineNuxtConfig({
     n8nRegerarUrl: process.env.N8N_REGERAR_URL,
     anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+    // URL interna do serviço Python do Monitor SmartOLT. As rotas
+    // server/api/monitor/* fazem proxy pra cá (exigindo admin/supervisor);
+    // o navegador nunca fala direto com este serviço.
+    monitorApiUrl: process.env.MONITOR_API_URL || 'http://127.0.0.1:5001',
+    // Segredo compartilhado com o serviço do monitor (opcional; só quando ele
+    // roda em outro host e é alcançado pela rede). Vazio = sem token.
+    monitorApiToken: process.env.MONITOR_API_TOKEN || '',
     public: {
       // URL do servidor Flask Aut-SGP (uso legado / health-check opcional)
       sgpUrl: '',

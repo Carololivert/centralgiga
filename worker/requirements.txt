@@ -6,3 +6,4 @@ tzdata>=2024.1  # zoneinfo America/Sao_Paulo no Windows/VPS sem tz database
 openpyxl>=3.1.0  # relatório de linhas canceladas (Excel)
 playwright>=1.45.0  # Remover Linhas (navegador) e login web 2FA de comum/sgp_login
 pyotp>=2.9.0  # 2FA (TOTP) do SGP em comum/sgp_login.py
+flask>=3.0.0  # API HTTP do Monitor SmartOLT embarcada (monitor/service.py)

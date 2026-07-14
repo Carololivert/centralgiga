@@ -15,7 +15,9 @@ export interface Sistema {
   name: string
   description: string | null
   allowed_roles: Role[]
-  kind: 'job' | 'inbox'
+  // 'job' = fila (worker executa) · 'inbox' = módulo próprio ·
+  // 'painel' = página própria em tempo real (ex.: Monitor de Rede)
+  kind: 'job' | 'inbox' | 'painel'
   param_schema: Record<string, any>
   sort_order: number
   active: boolean

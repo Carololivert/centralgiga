@@ -14,6 +14,7 @@ Central web interna que reúne as automações da Giganet num painel único, com
 | **Termos Agendados** | `Aut-SGP/termos_agendados.py` | fila | admin, supervisor |
 | **Conferência de Checklist** | `Aut-SGP/checklist_equipe.py` (IA) | fila | admin, atendente |
 | **Giganet Avaliações** | central antiga + n8n | inbox (aprovação) | admin |
+| **Monitor de Rede** | `worker/monitor/` (SmartOLT + SGP) | painel (tempo real) | admin, supervisor |
 
 > Decisões desta central: a **Folha de Pagamento** ficou de fora (não é SGP/Giganet); **Avaliações** é portada pra cá reusando o n8n e a tabela `giganet_reviews`; **Supabase** é o mesmo projeto da central atual.
 
@@ -21,11 +22,16 @@ Central web interna que reúne as automações da Giganet num painel único, com
 
 ```
 Centralgiga/
-  web/                 # Nuxt 4 (UI + Auth + API routes das avaliações)
-  worker/              # Worker Python (fila → executa → Storage)
+  web/                 # Nuxt 4 (UI + Auth + API routes das avaliações + proxy do monitor)
+  worker/              # Worker Python (fila → executa → Storage) + API do Monitor de Rede
   supabase/migrations/ # SQL versionado (rode no SQL Editor ou via CLI)
   README.md
 ```
+
+> **Monitor de Rede** (tempo real, admin/supervisor) não usa a fila: é uma página
+> Nuxt (`/monitor`) que lê a API do monitor — servida pelo **próprio worker** numa
+> thread (`worker/monitor/service.py`) — via `web/server/api/monitor/*` (proxy que
+> exige o cargo). Um processo só: `python worker.py` roda a fila **e** o monitor.
 
 Fluxo de uma execução (sistemas de fila): o usuário clica **Executar** → o Nuxt insere uma linha em `jobs` (a **RLS** só deixa se o cargo tiver acesso) → o **worker Python** reivindica o job (`claim_next_job`), roda o script e grava logs em `job_logs` e o resultado no **Storage** → o Nuxt acompanha por **Realtime** e oferece o download por **signed URL**.
 
