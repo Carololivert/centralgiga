@@ -42,8 +42,14 @@ watch(janela, () => {
   if (open.value && props.pon) carregar()
 })
 
+const reportDown = computed(() => dados.value?.report_down || 0)
+const aoVivoIncompleto = computed(() => dados.value?.ao_vivo_incompleto === true)
+
+// "sem quedas 🎉" só quando o relatório de outage TAMBÉM confirma 0 — senão seria
+// all-clear falso (o status ao vivo da SmartOLT costuma vir incompleto/None).
 const vazio = computed(() =>
-  dados.value && !dados.value.grupos?.length && !dados.value.sem_hora?.length,
+  !!dados.value && !dados.value.grupos?.length && !dados.value.sem_hora?.length
+  && !aoVivoIncompleto.value && reportDown.value === 0,
 )
 </script>
 
@@ -58,7 +64,11 @@ const vazio = computed(() =>
       <!-- barra de resumo + janela -->
       <div class="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-default text-sm">
         <template v-if="dados?.ok">
-          <span class="text-muted">
+          <span v-if="aoVivoIncompleto" class="text-muted">
+            <b class="text-warning tabular-nums">{{ reportDown }}</b> caído(s) pelo relatório ·
+            <span class="text-warning">status ao vivo indisponível</span>
+          </span>
+          <span v-else class="text-muted">
             <b class="text-default tabular-nums">{{ dados.total_pon }}</b> na PON ·
             <b class="text-default tabular-nums">{{ dados.down }}</b> caído(s) ·
             <b class="text-warning tabular-nums">{{ dados.ativos_down }}</b> ativo(s) caído
@@ -104,6 +114,22 @@ const vazio = computed(() =>
         </div>
 
         <div v-else-if="dados" class="p-4 space-y-3">
+          <!-- aviso: status ao vivo incompleto — cai para o relatório de outage
+               (fonte firme) em vez de dar "sem quedas" falso -->
+          <div v-if="aoVivoIncompleto" class="rounded-lg border border-warning/40 bg-warning/10 p-3">
+            <div class="flex items-center gap-2 text-sm font-medium text-warning">
+              <UIcon name="i-lucide-triangle-alert" class="size-4 shrink-0" />
+              Status ao vivo indisponível nesta OLT
+            </div>
+            <p class="mt-1 text-sm text-muted">
+              A SmartOLT não atualizou o status individual das ONUs agora, então não dá
+              pra listar todos os clientes. Pelo relatório de outage (fonte firme):
+              <b class="text-error">{{ dados.relatorio?.los || 0 }} LOS</b> ·
+              <b class="text-info">{{ dados.relatorio?.power || 0 }} power fail</b> ·
+              <b class="text-default">{{ dados.relatorio?.offline || 0 }} offline</b><template v-if="dados.relatorio"> ({{ reportDown }} de {{ dados.relatorio.total }} ONUs)</template>. Recarregue em instantes para tentar o cruzamento.
+            </p>
+          </div>
+
           <!-- grupos por motivo + janela -->
           <div
             v-for="(g, gi) in dados.grupos"
