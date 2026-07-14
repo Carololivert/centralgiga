@@ -28,6 +28,9 @@ N8N_REGERAR_URL         = https://SEU-N8N.exemplo.com/webhook/giganet-regerar
 ANTHROPIC_API_KEY       = (opcional — botão "regerar" usa o n8n, não precisa)
 ANTHROPIC_MODEL         = claude-sonnet-4-6
 NUXT_PUBLIC_SGP_URL     = https://SEU-AUT-SGP.exemplo.com
+# Monitor de Rede (proxy em /api/monitor/*) → aponta pro worker no easypanel:
+MONITOR_API_URL         = https://SEU-MONITOR.easypanel.host   (domínio do worker, porta 5001)
+MONITOR_API_TOKEN       = (mesmo segredo do worker — protege o endpoint exposto)
 ```
 
 ### Passo a passo
@@ -62,8 +65,14 @@ O worker tem um **`Dockerfile`** pronto (Python + Chromium do Playwright).
    # FocusChat via API oficial (Token do Canal) — Verificar Vendas:
    FOCUS_TOKEN                = (worker/.env)
    WORKER_POLL_SECONDS        = 5
+   # SmartOLT (Monitor de Rede) — temperatura/outage das OLTs:
+   SMARTOLT_SUBDOMAIN         = (worker/.env)
+   SMARTOLT_TOKEN             = (worker/.env)
+   # Monitor: no container já escuta em 0.0.0.0 (default da imagem). Proteja o
+   # endpoint exposto com um segredo forte (o MESMO valor na Vercel):
+   MONITOR_API_TOKEN          = (gere um segredo forte)
    ```
-3. Sem porta exposta (o worker só faz chamadas de saída). Deixe **restart: always**.
+3. **Exponha a porta do Monitor:** em **Domains** do app, adicione um domínio apontando para a **porta 5001** (o easypanel provisiona HTTPS sozinho). Essa URL vira o `MONITOR_API_URL` na Vercel. As automações continuam só de saída — o único inbound é a API do monitor, protegida pelo `MONITOR_API_TOKEN`. Deixe **restart: always**.
 4. Deploy. Nos logs deve aparecer `[worker] iniciado · automações: relatorio-os, termos-agendados, ...`.
 
 ### Alternativa: VPS com systemd

@@ -12,6 +12,11 @@ SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").stri
 RESULT_BUCKET = os.environ.get("RESULT_BUCKET", "resultados").strip()
 POLL_SECONDS = float(os.environ.get("WORKER_POLL_SECONDS", "5"))
 
+# ── Monitor SmartOLT (API HTTP embarcada no worker; ver monitor/service.py) ──
+MONITOR_ENABLED = os.environ.get("MONITOR_API_ENABLED", "true").strip().lower() not in ("0", "false", "no", "off")
+MONITOR_HOST = os.environ.get("MONITOR_HOST", "127.0.0.1").strip()
+MONITOR_PORT = int(os.environ.get("MONITOR_PORT", "5001"))
+
 
 def get_client() -> Client:
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:

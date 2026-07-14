@@ -26,6 +26,12 @@ worker/
 │  ├─ vendas/                # vendas_focus_sgp.py (Verificar Vendas)
 │  ├─ telefonia/             # relatorio_linhas_canceladas.py, remover_linhas.py
 │  └─ conferencia-os/        # checklist_equipe.py (engine da Conferência)
+├─ monitor/                  # API HTTP do Monitor de Rede (roda em thread; ver §Monitor)
+│  ├─ service.py             # Flask (/api/snapshot, /api/pon) + iniciar_em_thread
+│  ├─ smartolt_api.py        # cliente SmartOLT (X-Token)
+│  ├─ sgp_api.py             # cliente SGP (Token/App)
+│  ├─ cruza_sgp.py           # cruza ONU (SmartOLT) × cliente (SGP)
+│  └─ demo_data.py           # dados fictícios (MONITOR_DEMO=1)
 ├─ requirements.txt
 ├─ .env.example
 └─ deploy/worker.service
@@ -39,6 +45,7 @@ worker/
 | Verificar Vendas | FocusChat API + SGP API | `FOCUS_TOKEN`, `SGP_TOKEN` / `SGP_APP` |
 | Conferência de Checklist | SGP login web | `SGP_USER` / `SGP_PASS` |
 | Linhas Canceladas, Remover Linhas | SGP login web (+ Chromium) | `SGP_USER` / `SGP_PASS` |
+| Monitor de Rede | SmartOLT API + SGP API | `SMARTOLT_SUBDOMAIN` / `SMARTOLT_TOKEN`, `SGP_TOKEN` / `SGP_APP` |
 
 ## Rodar localmente (Windows/PowerShell)
 
@@ -64,6 +71,28 @@ O worker fica em loop. Quando alguém clica **Executar** na central, aparece:
   [xxxxxxxx] Resultado salvo no Storage: relatorio-os.txt
   [xxxxxxxx] Concluído ✓
 ```
+
+## Monitor de Rede (API embarcada)
+
+O worker também sobe, **numa thread**, a API do Monitor de Rede (o painel em
+tempo real da Central, só admin/supervisor) — não precisa de outro processo. No
+arranque aparece:
+
+```
+[worker] monitor SmartOLT em http://127.0.0.1:5001 (API p/ a Central)
+```
+
+- Endpoints: `GET /api/snapshot` e `GET /api/pon?olt=&board=&port=&janela=`.
+- A Central (web) consome via `web/server/api/monitor/*` (proxy que exige o
+  cargo), apontando `MONITOR_API_URL` (em `web/.env`) para este `host:porta`.
+- Credenciais: `SMARTOLT_*` + `SGP_TOKEN`/`SGP_APP` no `.env` (as do SGP já são
+  as mesmas das outras automações).
+- Desligar: `MONITOR_API_ENABLED=false`. Testar sem credenciais: `MONITOR_DEMO=1`.
+- **Web em outro host** (ex.: Vercel, com o worker no VPS): defina o mesmo
+  `MONITOR_API_TOKEN` aqui e em `web/.env`, e `MONITOR_HOST=0.0.0.0` — a API
+  passa a exigir o header `X-Monitor-Token`.
+
+Teste isolado do monitor (sem a fila): `MONITOR_DEMO=1 python -m monitor.service`.
 
 ## Deploy no VPS (systemd)
 

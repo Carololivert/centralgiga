@@ -92,9 +92,11 @@ const iconePorSlug: Record<string, string> = {
   'verificar-vendas': 'i-lucide-user-check',
   'linhas-canceladas': 'i-lucide-phone-off',
   'remover-linhas': 'i-lucide-trash-2',
+  'monitor': 'i-lucide-radio-tower',
 }
 
 function abrir(s: Sistema) {
+  if (s.kind === 'painel') return navigateTo(`/${s.slug}`)
   if (s.kind === 'inbox' && s.slug === 'giganet-avaliacoes') return navigateTo('/avaliacoes')
   return navigateTo(`/sistema/${s.slug}`)
 }

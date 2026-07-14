@@ -13,7 +13,10 @@ from datetime import datetime, timezone
 
 from automacoes.base import Resultado
 from automacoes.registry import REGISTRY, get_automacao
-from config import POLL_SECONDS, RESULT_BUCKET, get_client
+from config import (
+    POLL_SECONDS, RESULT_BUCKET, get_client,
+    MONITOR_ENABLED, MONITOR_HOST, MONITOR_PORT,
+)
 
 
 def _setup_console():
@@ -147,11 +150,25 @@ def processar(client, job: dict):
             auditar(client, job, "erro", str(e))
 
 
+def iniciar_monitor():
+    """Sobe a API do Monitor SmartOLT numa thread (não bloqueia a fila).
+    Falha aqui é só um aviso — o processamento de jobs continua normal."""
+    if not MONITOR_ENABLED:
+        return
+    try:
+        from monitor.service import iniciar_em_thread
+        iniciar_em_thread(MONITOR_HOST, MONITOR_PORT)
+        _p(f"[worker] monitor SmartOLT em http://{MONITOR_HOST}:{MONITOR_PORT} (API p/ a Central)")
+    except Exception as e:
+        _p(f"[worker] [warn] monitor não subiu: {e} (a fila de jobs segue normal)")
+
+
 def main():
     _setup_console()
     client = get_client()
     _p(f"[worker] iniciado · bucket={RESULT_BUCKET} · poll={POLL_SECONDS}s")
     _p(f"[worker] automações: {', '.join(REGISTRY) or '(nenhuma)'}")
+    iniciar_monitor()
 
     while True:
         try:

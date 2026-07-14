@@ -25,6 +25,7 @@ const iconePorSlug: Record<string, string> = {
   'verificar-vendas': 'i-lucide-user-check',
   'linhas-canceladas': 'i-lucide-phone-off',
   'remover-linhas': 'i-lucide-trash-2',
+  'monitor': 'i-lucide-radio-tower',
 }
 
 const links = computed<NavigationMenuItem[][]>(() => {
@@ -38,7 +39,11 @@ const links = computed<NavigationMenuItem[][]>(() => {
   const sis = (sistemas.value ?? []).map(s => ({
     label: s.name,
     icon: iconePorSlug[s.slug] || 'i-lucide-cpu',
-    to: s.kind === 'inbox' && s.slug === 'giganet-avaliacoes' ? '/avaliacoes' : `/sistema/${s.slug}`,
+    to: s.kind === 'painel'
+      ? `/${s.slug}`
+      : s.kind === 'inbox' && s.slug === 'giganet-avaliacoes'
+        ? '/avaliacoes'
+        : `/sistema/${s.slug}`,
   }))
   if (sis.length) {
     grupos.push([{ label: 'Sistemas', type: 'label' as const }, ...sis])
