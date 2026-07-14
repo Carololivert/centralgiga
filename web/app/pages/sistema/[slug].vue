@@ -21,6 +21,13 @@ const { data: sistema } = await useAsyncData(
   },
 )
 
+// Sistemas 'painel' (ex.: Monitor de Rede) NÃO usam a fila de jobs — têm página
+// própria. Se alguém cair aqui por link/atalho antigo, manda pra tela certa
+// (evita tentar inserir um job de painel, que a RLS corretamente rejeita).
+if (sistema.value?.kind === 'painel') {
+  await navigateTo(`/${slug.value}`, { replace: true })
+}
+
 const iconePorSlug: Record<string, string> = {
   'relatorio-os': 'i-lucide-clipboard-list',
   'termos-agendados': 'i-lucide-file-signature',
