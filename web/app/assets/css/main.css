@@ -24,3 +24,35 @@
 .bg-primary.text-inverted {
   color: #0f172a;
 }
+
+/* ── Paleta de dados (dashboard de Produção) ──────────────────────────
+   Uma cor FIXA por categoria de OS — a mesma no gráfico de hora, no do mês,
+   na barra de POP e na tabela. Filtrar não repinta ninguém.
+
+   Os dois conjuntos foram validados (faixa de luminosidade, croma, separação
+   sob daltonismo protan/deutan/tritan e contraste com a superfície) contra
+   #ffffff no tema claro e #171717 no escuro. NÃO troque um hex isolado: a
+   segurança vem do conjunto e da ordem. No tema claro, mudança/corretiva/
+   rompimento ficam abaixo de 3:1 — por isso todo gráfico aqui vem com legenda
+   e com tabela equivalente (nunca só a cor). */
+:root {
+  --viz-instalacao: #2a78d6;
+  --viz-remocao:    #eb6834;
+  --viz-mudanca:    #1baf7a;
+  --viz-corretiva:  #eda100;
+  --viz-rompimento: #e87ba4;
+  --viz-servico:    #008300;
+  --viz-outros:     #4a3aa7;
+  --viz-grade:      #e1e0d9;
+}
+
+.dark {
+  --viz-instalacao: #3987e5;
+  --viz-remocao:    #d95926;
+  --viz-mudanca:    #199e70;
+  --viz-corretiva:  #c98500;
+  --viz-rompimento: #d55181;
+  --viz-servico:    #008300;
+  --viz-outros:     #9085e9;
+  --viz-grade:      #2c2c2a;
+}

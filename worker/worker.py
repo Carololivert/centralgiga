@@ -150,6 +150,16 @@ def processar(client, job: dict):
             auditar(client, job, "erro", str(e))
 
 
+def iniciar_agenda():
+    """Sobe a agenda (sincronização da Produção às 18h) numa thread.
+    Falha aqui é só um aviso — a fila de jobs continua normal."""
+    try:
+        from agenda import iniciar_em_thread
+        iniciar_em_thread()
+    except Exception as e:
+        _p(f"[worker] [warn] agenda não subiu: {e} (a fila de jobs segue normal)")
+
+
 def iniciar_monitor():
     """Sobe a API do Monitor SmartOLT numa thread (não bloqueia a fila).
     Falha aqui é só um aviso — o processamento de jobs continua normal."""
@@ -169,6 +179,7 @@ def main():
     _p(f"[worker] iniciado · bucket={RESULT_BUCKET} · poll={POLL_SECONDS}s")
     _p(f"[worker] automações: {', '.join(REGISTRY) or '(nenhuma)'}")
     iniciar_monitor()
+    iniciar_agenda()
 
     while True:
         try:

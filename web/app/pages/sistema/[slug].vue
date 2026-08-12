@@ -33,8 +33,10 @@ const iconePorSlug: Record<string, string> = {
   'termos-agendados': 'i-lucide-file-signature',
   'conferencia-checklist': 'i-lucide-list-checks',
   'verificar-vendas': 'i-lucide-user-check',
+  'streaming-ativacao': 'i-lucide-tv',
   'linhas-canceladas': 'i-lucide-phone-off',
   'remover-linhas': 'i-lucide-trash-2',
+  'producao-sync': 'i-lucide-refresh-cw',
 }
 
 const campos = computed(() =>

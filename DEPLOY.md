@@ -6,7 +6,7 @@ Três peças:
 |---|---|---|
 | **web** (Nuxt 4) | **Vercel** | front + API routes (avaliações). Serverless. |
 | **worker** (Python + Playwright) | **easypanel** (Docker) ou **VPS** | Remover Linhas usa Chromium → não roda em serverless. |
-| **banco** (Supabase) | já configurado | nada a fazer (migrations 0001–0006 aplicadas). |
+| **banco** (Supabase) | já configurado | aplicar as migrations novas no SQL Editor (a última é `0016_producao.sql`). |
 
 > Os valores das variáveis estão nos seus arquivos locais `web/.env` e `worker/.env`.
 > **Nunca** comite `.env` (já está no `.gitignore`).
@@ -62,8 +62,13 @@ O worker tem um **`Dockerfile`** pronto (Python + Chromium do Playwright).
    SGP_PASS                   = (worker/.env)
    SGP_VERIFY_SSL             = false
    SGP_2FA_SECRET             = (worker/.env)   # segredo TOTP, se o login web exigir 2FA
-   # FocusChat via API oficial (Token do Canal) — Verificar Vendas:
-   FOCUS_TOKEN                = (worker/.env)
+   # FocusChat via API oficial (Token do Canal) — Verificar Vendas.
+   # ⚠️ O token é POR CANAL (número de WhatsApp): um token só enxerga os chats
+   # DAQUELE número. As vendas entram por MAIS DE UM canal — se puser só o
+   # FOCUS_TOKEN, o relatório sai incompleto e SEM ERRO NENHUM. Use FOCUS_TOKENS
+   # (lista separada por vírgula) com todos os canais:
+   FOCUS_TOKENS               = (worker/.env)   # tok_canal1,tok_canal2,…
+   FOCUS_TOKEN                = (worker/.env)   # legado: 1 canal só
    WORKER_POLL_SECONDS        = 5
    # SmartOLT (Monitor de Rede) — temperatura/outage das OLTs:
    SMARTOLT_SUBDOMAIN         = (worker/.env)
@@ -71,6 +76,11 @@ O worker tem um **`Dockerfile`** pronto (Python + Chromium do Playwright).
    # Monitor: no container já escuta em 0.0.0.0 (default da imagem). Proteja o
    # endpoint exposto com um segredo forte (o MESMO valor na Vercel):
    MONITOR_API_TOKEN          = (gere um segredo forte)
+   # Produção (dashboard /producao): rotina que às 18h de Brasília lê as OS
+   # finalizadas no SGP. Só precisa do SGP_TOKEN/SGP_APP já definidos acima.
+   PRODUCAO_SYNC_ENABLED      = true
+   PRODUCAO_SYNC_HORA         = 18:00
+   PRODUCAO_SYNC_DIAS         = 3
    ```
 3. **Exponha a porta do Monitor:** em **Domains** do app, adicione um domínio apontando para a **porta 5001** (o easypanel provisiona HTTPS sozinho). Essa URL vira o `MONITOR_API_URL` na Vercel. As automações continuam só de saída — o único inbound é a API do monitor, protegida pelo `MONITOR_API_TOKEN`. Deixe **restart: always**.
 4. Deploy. Nos logs deve aparecer `[worker] iniciado · automações: relatorio-os, termos-agendados, ...`.
@@ -88,6 +98,10 @@ Use `worker/deploy/worker.service` (instruções no `worker/README.md`): `python
 2. **Teste o login** na URL da Vercel (admin `rafael@gmail.com`). Crie usuários em **Usuários**.
 3. **Teste um job** (Relatório de OS → Executar) — confirma que o worker no easypanel está pegando a fila.
 4. **Avaliações** — as 51 existentes aparecem; novas passam a chegar pelo n8n reapontado.
+5. **Produção** — rode a migration `0016_producao.sql` e depois, na Central,
+   abra **Sincronizar Produção** e peça os meses que quiser ver no histórico
+   (ex.: `de = 01/06/2026`, `até = 31/07/2026`). A partir daí o worker atualiza
+   sozinho todo dia às 18h e o painel **Produção** já mostra o mês fechando.
 
 ---
 

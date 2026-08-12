@@ -23,9 +23,12 @@ const iconePorSlug: Record<string, string> = {
   'conferencia-checklist': 'i-lucide-list-checks',
   'giganet-avaliacoes': 'i-lucide-star',
   'verificar-vendas': 'i-lucide-user-check',
+  'streaming-ativacao': 'i-lucide-tv',
   'linhas-canceladas': 'i-lucide-phone-off',
   'remover-linhas': 'i-lucide-trash-2',
   'monitor': 'i-lucide-radio-tower',
+  'producao': 'i-lucide-chart-column',
+  'producao-sync': 'i-lucide-refresh-cw',
 }
 
 const links = computed<NavigationMenuItem[][]>(() => {

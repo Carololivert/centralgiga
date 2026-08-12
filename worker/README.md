@@ -14,6 +14,7 @@ logs ao vivo + resultado de volta.
 ```
 worker/
 ├─ worker.py                 # loop: claim_next_job → executa → grava resultado
+├─ agenda.py                 # rotina automática: sincroniza a Produção às 18h (ver §Agenda)
 ├─ config.py                 # .env + client Supabase (service_role)
 ├─ automacoes/               # adapters: slug → chama o script e monta o Resultado
 │  ├─ base.py                # BaseAutomacao / Resultado / Arquivo
@@ -22,7 +23,7 @@ worker/
 │  └─ *.py                   # um adapter por sistema (relatorio_os, termos, …)
 ├─ scripts_originais/        # código das automações (repo automacoes-main)
 │  ├─ comum/                 # módulos compartilhados: sgp_api, focus_api, sgp_login
-│  ├─ relatorios/            # main.py (Relatório de OS), termos_agendados.py
+│  ├─ relatorios/            # main.py (Relatório de OS), termos_agendados.py, producao_os.py
 │  ├─ vendas/                # vendas_focus_sgp.py (Verificar Vendas)
 │  ├─ telefonia/             # relatorio_linhas_canceladas.py, remover_linhas.py
 │  └─ conferencia-os/        # checklist_equipe.py (engine da Conferência)
@@ -42,7 +43,8 @@ worker/
 | Automação | Acesso | Credenciais |
 |---|---|---|
 | Relatório de OS, Termos Agendados | SGP API (URA) | `SGP_TOKEN` / `SGP_APP` |
-| Verificar Vendas | FocusChat API + SGP API | `FOCUS_TOKEN`, `SGP_TOKEN` / `SGP_APP` |
+| Produção (dashboard + rotina das 18h) | SGP API (URA) | `SGP_TOKEN` / `SGP_APP` |
+| Verificar Vendas | FocusChat API + SGP API | `FOCUS_TOKENS` (vários canais, vírgula) ou `FOCUS_TOKEN` (1 só), `SGP_TOKEN` / `SGP_APP` |
 | Conferência de Checklist | SGP login web | `SGP_USER` / `SGP_PASS` |
 | Linhas Canceladas, Remover Linhas | SGP login web (+ Chromium) | `SGP_USER` / `SGP_PASS` |
 | Monitor de Rede | SmartOLT API + SGP API | `SMARTOLT_SUBDOMAIN` / `SMARTOLT_TOKEN`, `SGP_TOKEN` / `SGP_APP` |
@@ -71,6 +73,38 @@ O worker fica em loop. Quando alguém clica **Executar** na central, aparece:
   [xxxxxxxx] Resultado salvo no Storage: relatorio-os.txt
   [xxxxxxxx] Concluído ✓
 ```
+
+## Agenda: Produção às 18h (rotina automática)
+
+Além da fila, o worker sobe uma thread (`agenda.py`) que **todo dia às 18h de
+Brasília** — horário em que o técnico encerra o expediente — lê no SGP as OS
+finalizadas e grava na tabela `os_producao`, que alimenta o painel **Produção**
+da Central (`/producao`).
+
+```
+[agenda] produção agendada para 18:00 (Brasília) · última execução: 10/08/2026
+[agenda] sincronizando a produção (janela de 3 dia(s))…
+[agenda] produção atualizada: 214 OS gravadas (rotina das 18:00).
+```
+
+- **Janela de 3 dias, não só hoje**: OS de plantão são encerradas depois das 18h
+  e às vezes o técnico lança no dia seguinte. O upsert é por `os_id`, então
+  reprocessar dias já sincronizados corrige o passado sem duplicar nada.
+- **Worker fora do ar às 18h?** Ao subir, ele consulta `os_sync`; se o dia ainda
+  não foi sincronizado e já passou do horário, roda na hora — um deploy no meio
+  da tarde não deixa buraco no dashboard.
+- **SGP fora do ar às 18h?** Tenta de novo a cada 15 min, até 4 vezes, antes de
+  desistir do dia. O erro fica em `os_sync` e o painel avisa que os dados estão
+  velhos (banner amarelo depois de 36h sem sincronização).
+- **Backfill / reprocessar**: a automação **Sincronizar Produção**
+  (`producao-sync`) na Central aceita um período (`de`/`até`) e faz o mesmo
+  trabalho sob demanda. Um mês inteiro (~1.200 OS) leva ~10s.
+- Configuração: `PRODUCAO_SYNC_ENABLED`, `PRODUCAO_SYNC_HORA` (padrão `18:00`),
+  `PRODUCAO_SYNC_DIAS` (padrão `3`). Desligar: `PRODUCAO_SYNC_ENABLED=false`.
+- Teste avulso, sem esperar o horário: `python -m agenda`.
+
+> Requer a migration `0016_producao.sql` aplicada (cria `os_producao`, `os_sync`,
+> a RPC do painel e cadastra os dois sistemas).
 
 ## Monitor de Rede (API embarcada)
 
