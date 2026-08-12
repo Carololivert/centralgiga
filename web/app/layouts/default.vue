@@ -32,10 +32,12 @@ const iconePorSlug: Record<string, string> = {
 }
 
 const links = computed<NavigationMenuItem[][]>(() => {
+  // "Início" aponta para /sistemas (a grade de atalhos). A raiz "/" é só o
+  // desvio que leva quem pode ao painel de Produção — não é um destino de menu.
   const grupos: NavigationMenuItem[][] = [
     [
       { label: 'Painel', type: 'label' as const },
-      { label: 'Início', icon: 'i-lucide-home', to: '/' },
+      { label: 'Início', icon: 'i-lucide-home', to: '/sistemas' },
     ],
   ]
 

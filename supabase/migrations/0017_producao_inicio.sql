@@ -1,0 +1,14 @@
+-- ─────────────────────────────────────────────────────────────
+-- 0017_producao_inicio.sql · Produção passa a ser a tela de entrada
+--
+-- A Central abre direto no painel de Produção para quem tem acesso a ele
+-- (admin/supervisor) — é o que a supervisão quer ver ao entrar: como o dia
+-- está indo. Quem não tem acesso continua caindo na grade de sistemas.
+--
+-- O desvio em si é do app (web/app/pages/index.vue, que decide consultando
+-- esta tabela). Aqui só reordenamos o catálogo para o menu lateral acompanhar:
+-- Produção no topo da lista de Sistemas.
+--
+-- Idempotente.
+-- ─────────────────────────────────────────────────────────────
+update public.systems set sort_order = 1 where slug = 'producao';
